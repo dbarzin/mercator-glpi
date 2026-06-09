@@ -17,6 +17,12 @@ use App\Services\Mercator\Contracts\MercatorClientInterface;
 use App\Services\Mercator\MercatorClient;
 use Illuminate\Support\ServiceProvider;
 
+use App\Services\Glpi\Handlers\NetworkDeviceSyncHandler;
+use App\Services\Glpi\Mappers\NetworkDeviceMapper;
+
+use App\Services\Glpi\Handlers\LocationSyncHandler;
+use App\Services\Glpi\Mappers\LocationMapper;
+
 class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
@@ -53,6 +59,14 @@ class AppServiceProvider extends ServiceProvider
 
         $this->app->singleton(PhoneSyncHandler::class, fn($app) =>
         new PhoneSyncHandler($app->make(PhoneMapper::class))
+        );
+
+        $this->app->singleton(NetworkDeviceSyncHandler::class, fn($app) =>
+        new NetworkDeviceSyncHandler($app->make(NetworkDeviceMapper::class))
+        );
+
+        $this->app->singleton(LocationSyncHandler::class, fn($app) =>
+        new LocationSyncHandler($app->make(LocationMapper::class))
         );
 
         $this->app->singleton(GlpiSyncService::class);

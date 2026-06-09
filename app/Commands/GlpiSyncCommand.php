@@ -12,6 +12,9 @@ use App\Services\Mercator\Contracts\MercatorClientInterface;
 use LaravelZero\Framework\Commands\Command;
 use Throwable;
 
+use App\Services\Glpi\Handlers\NetworkDeviceSyncHandler;
+use App\Services\Glpi\Handlers\LocationSyncHandler;
+
 class GlpiSyncCommand extends Command
 {
     protected $signature = 'glpi:sync
@@ -25,6 +28,8 @@ class GlpiSyncCommand extends Command
         'applications' => ApplicationSyncHandler::class,
         'peripherals'  => PeripheralSyncHandler::class,
         'phones'       => PhoneSyncHandler::class,
+        'network_devices' => NetworkDeviceSyncHandler::class,
+        'locations' => NetworkDeviceSyncHandler::class,
     ];
 
     public function handle(
