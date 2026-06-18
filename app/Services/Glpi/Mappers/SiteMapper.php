@@ -18,7 +18,7 @@ class SiteMapper
     public function map(array $item): array
     {
         return [
-            'name'        => $item['name'],
+            'name' => $item['name'],
             'description' => $this->buildDescription($item, ['locations_id']),
         ];
     }

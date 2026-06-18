@@ -7,53 +7,50 @@ use App\Services\Glpi\Mappers\Concerns\AppendsUnmappedFields;
 class WorkstationMapper
 {
     use AppendsUnmappedFields;
+
     /**
      * Mappe un Computer GLPI (expand_dropdowns=1) vers un payload Workstation Mercator.
      *
-     * @param  array  $item     Computer GLPI brut
+     * @param  array  $item  Computer GLPI brut
      * @param  array  $context  ['buildings_map' => ['nom salle (lower)' => id]]
      */
     public function map(array $item, array $context): array
     {
         $buildingsMap = $context['buildings_map'] ?? [];
-        $building     = $this->resolveBuilding($item['locations_id'] ?? null, $buildingsMap);
+        $building = $this->resolveBuilding($item['locations_id'] ?? null, $buildingsMap);
 
         return array_filter([
-            'name'               => $item['name'],
-            'description'        => $this->buildDescription($item, [
+            'name' => $item['name'],
+            'description' => $this->buildDescription($item, [
                 'computertypes_id', 'manufacturers_id', 'computermodels_id', 'serial',
                 'operatingsystems_id', 'states_id', 'users_id', 'locations_id', 'ram', 'date_last_boot',
             ]),
-            'type'               => $this->nullable($item['computertypes_id'] ?? null),
-            'manufacturer'       => $this->nullable($item['manufacturers_id'] ?? null),
-            'model'              => $this->nullable($item['computermodels_id'] ?? null),
-            'serial_number'      => $this->nullable($item['serial'] ?? null),
-            'operating_system'   => $this->nullable($item['operatingsystems_id'] ?? null),
-            'status'             => $this->nullable($item['states_id'] ?? null),
-            'other_user'         => $this->nullable($item['users_id'] ?? null),
-            'building_id'        => $building['id'] ?? null,
-            'site_id'            => $building['site_id'] ?? null,
-            'address_ip'         => $this->extractIp($item),
-            'mac_address'        => $this->extractMac($item),
-            'network_port_type'  => $this->extractPortType($item),
-            'cpu'                => $this->extractCpu($item),
-            'memory'             => $this->formatRam($item['ram'] ?? null),
-            'disk'               => $this->extractDiskTotal($item),
-            'last_inventory_date'=> $this->parseDate($item['date_last_boot'] ?? null),
-            'purchase_date'      => $this->parseDate($item['_infocoms']['buy_date'] ?? null),
-            'warranty_start_date'=> $this->parseDate($item['_infocoms']['order_date'] ?? null),
-            'warranty_end_date'  => $this->parseDate($item['_infocoms']['warranty_expiration'] ?? null),
-            'warranty_period'    => $this->formatWarrantyPeriod($item['_infocoms']['warranty_duration'] ?? null),
-            'fin_value'          => isset($item['_infocoms']['value'])
+            'type' => $this->nullable($item['computertypes_id'] ?? null),
+            'manufacturer' => $this->nullable($item['manufacturers_id'] ?? null),
+            'model' => $this->nullable($item['computermodels_id'] ?? null),
+            'serial_number' => $this->nullable($item['serial'] ?? null),
+            'operating_system' => $this->nullable($item['operatingsystems_id'] ?? null),
+            'status' => $this->nullable($item['states_id'] ?? null),
+            'other_user' => $this->nullable($item['users_id'] ?? null),
+            'building_id' => $building['id'] ?? null,
+            'site_id' => $building['site_id'] ?? null,
+            'address_ip' => $this->extractIp($item),
+            'mac_address' => $this->extractMac($item),
+            'network_port_type' => $this->extractPortType($item),
+            'cpu' => $this->extractCpu($item),
+            'memory' => $this->formatRam($item['ram'] ?? null),
+            'disk' => $this->extractDiskTotal($item),
+            'last_inventory_date' => $this->parseDate($item['date_last_boot'] ?? null),
+            'purchase_date' => $this->parseDate($item['_infocoms']['buy_date'] ?? null),
+            'warranty_start_date' => $this->parseDate($item['_infocoms']['order_date'] ?? null),
+            'warranty_end_date' => $this->parseDate($item['_infocoms']['warranty_expiration'] ?? null),
+            'warranty_period' => $this->formatWarrantyPeriod($item['_infocoms']['warranty_duration'] ?? null),
+            'fin_value' => isset($item['_infocoms']['value'])
                 ? (float) $item['_infocoms']['value']
                 : null,
-            'update_source'      => 'GLPI',
-        ], fn($v) => $v !== null);
+            'update_source' => 'GLPI',
+        ], fn ($v) => $v !== null);
     }
-
-    // -------------------------------------------------------------------------
-    // Description avec tag glpi_id
-    // -------------------------------------------------------------------------
 
     // -------------------------------------------------------------------------
     // Résolution building_id
@@ -124,7 +121,7 @@ class WorkstationMapper
         $ports = $item['_networkports'] ?? [];
 
         yield from $ports['NetworkPortEthernet'] ?? [];
-        yield from $ports['NetworkPortWifi']     ?? [];
+        yield from $ports['NetworkPortWifi'] ?? [];
     }
 
     // -------------------------------------------------------------------------
@@ -139,7 +136,7 @@ class WorkstationMapper
             return null;
         }
 
-        $first       = $processors[0];
+        $first = $processors[0];
         $designation = $first['designation'] ?? '';
 
         if (! $designation) {
@@ -149,10 +146,10 @@ class WorkstationMapper
         $parts = [$designation];
 
         if (! empty($first['frequency'])) {
-            $parts[] = $first['frequency'] . ' MHz';
+            $parts[] = $first['frequency'].' MHz';
         }
         if (! empty($first['nbcores'])) {
-            $parts[] = $first['nbcores'] . ' cœurs';
+            $parts[] = $first['nbcores'].' cœurs';
         }
 
         return implode(' — ', $parts);
@@ -188,8 +185,8 @@ class WorkstationMapper
         $ramMb = (int) $ramMb;
 
         return $ramMb >= 1024
-            ? round($ramMb / 1024) . ' Go'
-            : $ramMb . ' Mo';
+            ? round($ramMb / 1024).' Go'
+            : $ramMb.' Mo';
     }
 
     // -------------------------------------------------------------------------
@@ -202,7 +199,7 @@ class WorkstationMapper
             return null;
         }
 
-        return (int) $months . ' mois';
+        return (int) $months.' mois';
     }
 
     // -------------------------------------------------------------------------

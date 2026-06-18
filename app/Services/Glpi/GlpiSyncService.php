@@ -28,25 +28,25 @@ class GlpiSyncService
      * @return array{created: int, updated: int, deleted: int, marked_old: int, errors: int, endpoint_missing: bool}
      */
     public function sync(
-        GlpiClientInterface     $glpi,
+        GlpiClientInterface $glpi,
         MercatorClientInterface $mercator,
-        SyncHandler             $handler,
-        bool                    $dryRun = false,
+        SyncHandler $handler,
+        bool $dryRun = false,
     ): array {
-        $stats    = ['created' => 0, 'updated' => 0, 'deleted' => 0, 'marked_old' => 0, 'errors' => 0, 'endpoint_missing' => false];
+        $stats = ['created' => 0, 'updated' => 0, 'deleted' => 0, 'marked_old' => 0, 'errors' => 0, 'endpoint_missing' => false];
         $endpoint = $handler->mercatorEndpoint();
 
         // ── 1. Chargement des données ─────────────────────────────────────────
 
         $buildingsMap = $this->buildBuildingsMap($mercator);
-        $sitesMap     = $this->buildSitesMap($mercator);
+        $sitesMap = $this->buildSitesMap($mercator);
 
         $glpiItems = $glpi->getItems(
             $handler->glpiItemType(),
             $handler->glpiQueryParams()
         );
 
-        Log::debug("[{$endpoint}] {$handler->glpiItemType()} GLPI : " . count($glpiItems) . ' item(s) reçu(s)');
+        Log::debug("[{$endpoint}] {$handler->glpiItemType()} GLPI : ".count($glpiItems).' item(s) reçu(s)');
 
         // ── 2. Filtrage par statut (Évolution 2) ──────────────────────────────
 
@@ -55,23 +55,23 @@ class GlpiSyncService
             : $this->resolveAllowedStates($handler->glpiItemType());
 
         if (! empty($allowedStates)) {
-            $before     = count($glpiItems);
-            $glpiItems  = array_values(array_filter(
+            $before = count($glpiItems);
+            $glpiItems = array_values(array_filter(
                 $glpiItems,
-                fn($item) => $this->matchesState($item, $allowedStates)
+                fn ($item) => $this->matchesState($item, $allowedStates)
             ));
             $filtered = $before - count($glpiItems);
-            Log::debug("[{$endpoint}] Filtre statut [{$handler->glpiItemType()}] : {$filtered} item(s) exclus, " . count($glpiItems) . ' conservé(s)');
+            Log::debug("[{$endpoint}] Filtre statut [{$handler->glpiItemType()}] : {$filtered} item(s) exclus, ".count($glpiItems).' conservé(s)');
         }
 
         // ── 3. Filtrage par sous-type (handler::filterItem) ───────────────────
 
-        $before    = count($glpiItems);
-        $glpiItems = array_values(array_filter($glpiItems, fn($item) => $handler->filterItem($item)));
-        $excluded  = $before - count($glpiItems);
+        $before = count($glpiItems);
+        $glpiItems = array_values(array_filter($glpiItems, fn ($item) => $handler->filterItem($item)));
+        $excluded = $before - count($glpiItems);
 
         if ($excluded > 0) {
-            Log::debug("[{$endpoint}] Filtre sous-type : {$excluded} item(s) exclus, " . count($glpiItems) . ' conservé(s)');
+            Log::debug("[{$endpoint}] Filtre sous-type : {$excluded} item(s) exclus, ".count($glpiItems).' conservé(s)');
         }
 
         // ── 3b. Enrichissement item par item (with_networkports, with_disks…) ─
@@ -87,7 +87,7 @@ class GlpiSyncService
             }
             unset($item);
 
-            Log::debug("[{$endpoint}] Enrichissement détaillé : " . count($glpiItems) . ' item(s)');
+            Log::debug("[{$endpoint}] Enrichissement détaillé : ".count($glpiItems).' item(s)');
         }
 
         // ── 4. Chargement Mercator ────────────────────────────────────────────
@@ -104,45 +104,57 @@ class GlpiSyncService
             throw $e;
         }
 
-        Log::debug("[{$endpoint}] Mercator : " . count($mercatorItems) . ' item(s) existant(s)');
+        Log::debug("[{$endpoint}] Mercator : ".count($mercatorItems).' item(s) existant(s)');
 
         // ── 5. Construction des index ─────────────────────────────────────────
+        // La réconciliation se fait prioritairement via ext_refs ({GLPI}id) ; le nom
+        // (en minuscules) ne sert que de filet de sécurité pour les items Mercator
+        // pas encore tagués (migration, création manuelle déjà nommée à l'identique).
 
-        $glpiMap = [];
-        foreach ($glpiItems as $item) {
-            $glpiMap[strtolower($item['name'])] = $item;
-        }
-
-        $mercMap = [];
+        $mercByGlpiId = [];
+        $mercByName = [];
         foreach ($mercatorItems as $item) {
-            $mercMap[strtolower($item['name'])] = [
-                'id'      => $item['id'],
-                'name'    => $item['name'],
-                'glpi_id' => $this->extractGlpiId($item['description'] ?? ''),
+            $entry = [
+                'id' => $item['id'],
+                'name' => $item['name'],
+                'ext_refs' => $item['ext_refs'] ?? null,
             ];
+
+            $glpiId = $this->extractGlpiId($entry['ext_refs']);
+            if ($glpiId !== null) {
+                $mercByGlpiId[(string) $glpiId] = $entry;
+            }
+
+            $mercByName[strtolower($item['name'])] ??= $entry;
         }
 
         $context = ['buildings_map' => $buildingsMap, 'sites_map' => $sitesMap];
 
         // ── 6. GLPI → Mercator : créer ou mettre à jour ───────────────────────
 
+        $matchedMercIds = [];
+
         foreach ($glpiItems as $glpiItem) {
-            $key    = strtolower($glpiItem['name']);
-            $action = isset($mercMap[$key]) ? 'UPDATE' : 'CREATE';
+            $glpiId = (string) $glpiItem['id'];
+            $existing = $mercByGlpiId[$glpiId] ?? $mercByName[strtolower($glpiItem['name'])] ?? null;
+            $action = $existing ? 'UPDATE' : 'CREATE';
 
             try {
                 $payload = $handler->map($glpiItem, $context);
+                $payload['ext_refs'] = $this->buildExtRefs($existing['ext_refs'] ?? null, $glpiItem['id']);
 
                 $payloadDebug = json_encode($payload, JSON_UNESCAPED_UNICODE);
                 if (strlen($payloadDebug) > 500) {
-                    $payloadDebug = substr($payloadDebug, 0, 500) . '…';
+                    $payloadDebug = substr($payloadDebug, 0, 500).'…';
                 }
 
                 Log::debug("[{$endpoint}] {$action} {$glpiItem['name']} — payload: {$payloadDebug}");
 
                 if ($action === 'UPDATE') {
+                    $matchedMercIds[$existing['id']] = true;
+
                     if (! $dryRun) {
-                        $mercator->update($endpoint, $mercMap[$key]['id'], $payload);
+                        $mercator->update($endpoint, $existing['id'], $payload);
                     }
                     $stats['updated']++;
                     Log::info("[{$endpoint}] Mis à jour : {$glpiItem['name']}");
@@ -155,20 +167,22 @@ class GlpiSyncService
                 }
             } catch (Throwable $e) {
                 $stats['errors']++;
-                Log::error("[{$endpoint}] Erreur sur {$glpiItem['name']} : " . $e->getMessage());
+                Log::error("[{$endpoint}] Erreur sur {$glpiItem['name']} : ".$e->getMessage());
             }
         }
 
         // ── 7. Mercator → nettoyage : supprimer ou marquer OLD ────────────────
 
         if ($handler->processOrphans()) {
-            foreach ($mercMap as $key => $mercItem) {
-                if (isset($glpiMap[$key])) {
+            foreach ($mercatorItems as $mercItem) {
+                if (isset($matchedMercIds[$mercItem['id']])) {
                     continue;
                 }
 
+                $glpiTagId = $this->extractGlpiId($mercItem['ext_refs'] ?? null);
+
                 try {
-                    if ($mercItem['glpi_id'] !== null) {
+                    if ($glpiTagId !== null) {
                         if (! $dryRun) {
                             $mercator->delete($endpoint, $mercItem['id']);
                         }
@@ -178,7 +192,7 @@ class GlpiSyncService
                         $oldName = $mercItem['name'];
                         if (! str_starts_with($oldName, '[OLD]')) {
                             if (! $dryRun) {
-                                $mercator->update($endpoint, $mercItem['id'], ['name' => '[OLD] ' . $oldName]);
+                                $mercator->update($endpoint, $mercItem['id'], ['name' => '[OLD] '.$oldName]);
                             }
                             $stats['marked_old']++;
                             Log::info("[{$endpoint}] Marqué OLD : {$oldName}");
@@ -186,7 +200,7 @@ class GlpiSyncService
                     }
                 } catch (Throwable $e) {
                     $stats['errors']++;
-                    Log::error("[{$endpoint}] Erreur nettoyage {$mercItem['name']} : " . $e->getMessage());
+                    Log::error("[{$endpoint}] Erreur nettoyage {$mercItem['name']} : ".$e->getMessage());
                 }
             }
         }
@@ -210,20 +224,20 @@ class GlpiSyncService
      * @return array{updated: int, skipped: int, errors: int}
      */
     public function syncLinks(
-        GlpiClientInterface     $glpi,
+        GlpiClientInterface $glpi,
         MercatorClientInterface $mercator,
-        bool                    $dryRun = false,
+        bool $dryRun = false,
     ): array {
         $stats = ['updated' => 0, 'skipped' => 0, 'errors' => 0];
 
         // ── 1. Chargement ─────────────────────────────────────────────────────
 
         $computers = $glpi->getItems('Computer', [
-            'range'            => '0-999',
+            'range' => '0-999',
             'expand_dropdowns' => 1,
         ]);
 
-        $wsItems  = $mercator->getAll('workstations');
+        $wsItems = $mercator->getAll('workstations');
         $appItems = $mercator->getAll('applications');
 
         // ── 2. Index Mercator ─────────────────────────────────────────────────
@@ -231,7 +245,7 @@ class GlpiSyncService
         $wsMap = [];
         foreach ($wsItems as $ws) {
             $wsMap[strtolower($ws['name'])] = [
-                'id'   => $ws['id'],
+                'id' => $ws['id'],
                 'name' => $ws['name'],
             ];
         }
@@ -258,7 +272,7 @@ class GlpiSyncService
             }
 
             $detail = $glpi->getItem('Computer', $computer['id'], [
-                'with_softwares'   => 1,
+                'with_softwares' => 1,
                 'expand_dropdowns' => 1,
             ]);
 
@@ -288,14 +302,14 @@ class GlpiSyncService
                 continue;
             }
 
-            $uniqueAppIds    = array_values(array_unique($applicationIds));
-            $workstationId   = $wsMap[$computerName]['id'];
+            $uniqueAppIds = array_values(array_unique($applicationIds));
+            $workstationId = $wsMap[$computerName]['id'];
             $workstationName = $wsMap[$computerName]['name'];
 
             try {
                 if (! $dryRun) {
                     $payload = [
-                        'name'         => $workstationName,
+                        'name' => $workstationName,
                         'applications' => $uniqueAppIds,
                     ];
 
@@ -315,7 +329,7 @@ class GlpiSyncService
                 ));
             } catch (Throwable $e) {
                 $stats['errors']++;
-                Log::error("[links] Erreur pour {$computerName} : " . $e->getMessage());
+                Log::error("[links] Erreur pour {$computerName} : ".$e->getMessage());
             }
         }
 
@@ -333,21 +347,21 @@ class GlpiSyncService
      * @return array{updated: int, skipped: int, errors: int}
      */
     public function syncActivityLinks(
-        GlpiClientInterface     $glpi,
+        GlpiClientInterface $glpi,
         MercatorClientInterface $mercator,
-        bool                    $dryRun = false,
+        bool $dryRun = false,
     ): array {
         $stats = ['updated' => 0, 'skipped' => 0, 'errors' => 0];
 
         // ── 1. Chargement ─────────────────────────────────────────────────────
 
         $appliances = $glpi->getItems('Appliance', [
-            'range'            => '0-999',
+            'range' => '0-999',
             'expand_dropdowns' => 1,
         ]);
 
         $activityItems = $mercator->getAll('activities');
-        $appItems      = $mercator->getAll('applications');
+        $appItems = $mercator->getAll('applications');
 
         // ── 2. Index Mercator ─────────────────────────────────────────────────
 
@@ -376,22 +390,24 @@ class GlpiSyncService
 
         foreach ($appliances as $appliance) {
             $applianceKey = strtolower(trim($appliance['name'] ?? ''));
-            $activityId   = $activityMap[$applianceKey] ?? null;
+            $activityId = $activityMap[$applianceKey] ?? null;
 
             if ($activityId === null) {
                 $stats['skipped']++;
                 Log::debug("[activity_links] Appliance sans activité Mercator : {$appliance['name']}");
+
                 continue;
             }
 
-            $detail        = $glpi->getItem('Appliance', $appliance['id'], [
-                'with_items'       => 1,
+            $detail = $glpi->getItem('Appliance', $appliance['id'], [
+                'with_items' => 1,
                 'expand_dropdowns' => 1,
             ]);
             $softwareItems = $detail['_items']['Software'] ?? [];
 
             if (empty($softwareItems)) {
                 Log::debug("[activity_links] Appliance sans logiciels liés : {$appliance['name']}");
+
                 continue;
             }
 
@@ -416,7 +432,7 @@ class GlpiSyncService
             try {
                 if (! $dryRun) {
                     $mercator->update('applications', $appEntry['id'], [
-                        'name'       => $appEntry['name'],
+                        'name' => $appEntry['name'],
                         'activities' => $activityIds,
                     ]);
                 }
@@ -429,7 +445,7 @@ class GlpiSyncService
                 ));
             } catch (Throwable $e) {
                 $stats['errors']++;
-                Log::error("[activity_links] Erreur pour {$appEntry['name']} : " . $e->getMessage());
+                Log::error("[activity_links] Erreur pour {$appEntry['name']} : ".$e->getMessage());
             }
         }
 
@@ -508,7 +524,7 @@ class GlpiSyncService
 
         foreach ($mercator->getBuildings() as $building) {
             $map[strtolower($building['name'])] = [
-                'id'      => $building['id'],
+                'id' => $building['id'],
                 'site_id' => $building['site_id'] ?? null,
             ];
         }
@@ -527,14 +543,39 @@ class GlpiSyncService
         return $map;
     }
 
-    private function extractGlpiId(?string $description): ?int
+    /**
+     * Extrait l'identifiant GLPI depuis le champ ext_refs Mercator (tag {GLPI}N).
+     */
+    private function extractGlpiId(?string $extRefs): ?int
     {
-        if (! $description) {
+        if (! $extRefs) {
             return null;
         }
 
-        preg_match('/^\[glpi_id:(\d+)\]/', $description, $matches);
+        preg_match('/\{GLPI\}(\d+)/', $extRefs, $matches);
 
         return isset($matches[1]) ? (int) $matches[1] : null;
+    }
+
+    /**
+     * Construit la valeur ext_refs à envoyer à Mercator : remplace/ajoute le tag
+     * {GLPI}id tout en préservant les éventuelles références d'autres sources.
+     */
+    private function buildExtRefs(?string $existingExtRefs, int|string $glpiId): string
+    {
+        $refs = [];
+
+        if ($existingExtRefs) {
+            foreach (explode('|', $existingExtRefs) as $ref) {
+                $ref = trim($ref);
+                if ($ref !== '' && ! str_starts_with($ref, '{GLPI}')) {
+                    $refs[] = $ref;
+                }
+            }
+        }
+
+        $refs[] = '{GLPI}'.$glpiId;
+
+        return implode('|', $refs);
     }
 }

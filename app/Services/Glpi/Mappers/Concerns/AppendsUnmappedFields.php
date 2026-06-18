@@ -19,19 +19,19 @@ trait AppendsUnmappedFields
     /**
      * Construit la description Mercator.
      *
-     * Format : "[glpi_id:N] commentaire\n"nom_champ" : "valeur"\n…"
+     * Format : "commentaire\n"nom_champ" : "valeur"\n…"
      *
      * Les champs GLPI non mappés vers un champ Mercator dédié sont sérialisés
-     * à la suite du tag glpi_id, à raison d'un par ligne, dans le format demandé.
+     * à raison d'un par ligne, dans le format demandé. L'identifiant GLPI n'est
+     * plus porté par la description : il est désormais dans le champ ext_refs
+     * (tag {GLPI}N), géré par GlpiSyncService.
      *
-     * @param  array  $item          Item GLPI brut
+     * @param  array  $item  Item GLPI brut
      * @param  array  $mappedFields  Clés GLPI déjà portées par un champ Mercator dédié
      */
-    protected function buildDescription(array $item, array $mappedFields = []): string
+    protected function buildDescription(array $item, array $mappedFields = []): ?string
     {
-        $tag     = '[glpi_id:' . $item['id'] . ']';
-        $comment = trim($item['comment'] ?? '');
-        $base    = $comment ? "{$tag} {$comment}" : $tag;
+        $base = trim($item['comment'] ?? '');
 
         $skip = array_merge(self::$glpiSkipAlways, $mappedFields);
 
@@ -47,9 +47,11 @@ trait AppendsUnmappedFields
                 continue;
             }
 
-            $extras[] = '"' . $key . '" : "' . $value . '"';
+            $extras[] = '"'.$key.'" : "'.$value.'"';
         }
 
-        return empty($extras) ? $base : $base . "\n" . implode("\n", $extras);
+        $description = empty($extras) ? $base : trim($base."\n".implode("\n", $extras));
+
+        return $description === '' ? null : $description;
     }
 }
