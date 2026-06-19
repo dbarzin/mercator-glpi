@@ -7,6 +7,8 @@ use App\Services\Glpi\GlpiClient;
 use App\Services\Glpi\GlpiSyncService;
 use App\Services\Glpi\Handlers\ApplicationSyncHandler;
 use App\Services\Glpi\Handlers\ApplianceSyncHandler;
+use App\Services\Glpi\Handlers\CertificateSyncHandler;
+use App\Services\Glpi\Handlers\ClusterSyncHandler;
 use App\Services\Glpi\Handlers\LocationSyncHandler;
 use App\Services\Glpi\Handlers\LogicalServerSyncHandler;
 use App\Services\Glpi\Handlers\NetworkDeviceSyncHandler;
@@ -22,6 +24,8 @@ use App\Services\Glpi\Handlers\WifiTerminalSyncHandler;
 use App\Services\Glpi\Handlers\WorkstationSyncHandler;
 use App\Services\Glpi\Mappers\ApplicationMapper;
 use App\Services\Glpi\Mappers\ApplianceMapper;
+use App\Services\Glpi\Mappers\CertificateMapper;
+use App\Services\Glpi\Mappers\ClusterMapper;
 use App\Services\Glpi\Mappers\LocationMapper;
 use App\Services\Glpi\Mappers\LogicalServerMapper;
 use App\Services\Glpi\Mappers\NetworkDeviceMapper;
@@ -69,6 +73,8 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(ApplianceMapper::class);
         $this->app->singleton(LocationMapper::class);
         $this->app->singleton(SiteMapper::class);
+        $this->app->singleton(CertificateMapper::class);
+        $this->app->singleton(ClusterMapper::class);
 
         $this->app->singleton(LogicalServerMapper::class, fn($app) =>
             new LogicalServerMapper($app->make(WorkstationMapper::class))
@@ -139,6 +145,14 @@ class AppServiceProvider extends ServiceProvider
 
         $this->app->singleton(PhysicalServerSyncHandler::class, fn($app) =>
             new PhysicalServerSyncHandler($app->make(PhysicalServerMapper::class))
+        );
+
+        $this->app->singleton(ClusterSyncHandler::class, fn($app) =>
+            new ClusterSyncHandler($app->make(ClusterMapper::class))
+        );
+
+        $this->app->singleton(CertificateSyncHandler::class, fn($app) =>
+            new CertificateSyncHandler($app->make(CertificateMapper::class))
         );
 
         $this->app->singleton(GlpiSyncService::class);
