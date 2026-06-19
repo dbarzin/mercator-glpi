@@ -6,6 +6,8 @@ use App\Services\Glpi\Contracts\GlpiClientInterface;
 use App\Services\Glpi\GlpiSyncService;
 use App\Services\Glpi\Handlers\ApplicationSyncHandler;
 use App\Services\Glpi\Handlers\ApplianceSyncHandler;
+use App\Services\Glpi\Handlers\CertificateSyncHandler;
+use App\Services\Glpi\Handlers\ClusterSyncHandler;
 use App\Services\Glpi\Handlers\LocationSyncHandler;
 use App\Services\Glpi\Handlers\LogicalServerSyncHandler;
 use App\Services\Glpi\Handlers\NetworkDeviceSyncHandler;
@@ -48,6 +50,8 @@ class GlpiSyncCommand extends Command
         'locations'                  => LocationSyncHandler::class,
         'logical_servers'            => LogicalServerSyncHandler::class,
         'physical_servers'           => PhysicalServerSyncHandler::class,
+        'certificates'               => CertificateSyncHandler::class,
+        'clusters'                   => ClusterSyncHandler::class,
     ];
 
     public function handle(
