@@ -85,7 +85,7 @@ MercatorClient               — Client HTTP Mercator (API REST, Bearer token)
 
 **Clé de réconciliation** : les actifs sont mis en correspondance prioritairement via le champ Mercator `ext_refs`, qui porte un tag `{GLPI}<id>` (valeur multivaluée, séparée par `|`, ex. `{PROXMOX}vm123|{GLPI}42`). `strtolower(name)` n'est utilisé qu'en fallback, pour les items Mercator pas encore tagués (premier sync après migration, ou items créés manuellement portant le même nom). Une fois la correspondance établie, `ext_refs` est renseigné/mis à jour, ce qui garantit que les synchronisations suivantes (y compris après un renommage côté GLPI) continuent de cibler le même enregistrement Mercator. `ext_refs` est calculé de façon centralisée par `GlpiSyncService` (pas par les Mappers) et fusionné pour préserver les références issues d'autres sources.
 
-**Traçabilité** : l'identifiant GLPI n'est plus inscrit dans le champ `description` (l'ancien préfixe `[glpi_id:N]` a été retiré de tous les mappers, y compris `CertificateMapper` et `ClusterMapper`) ; il est désormais uniquement porté par `ext_refs`. `description` ne contient plus que le `comment` GLPI suivi des champs non mappés sérialisés.
+**Traçabilité** : l'identifiant GLPI n'est jamais inscrit dans le champ `description` ; il est uniquement porté par `ext_refs`. `description` ne contient que le `comment` GLPI suivi des champs non mappés sérialisés.
 
 **Champs non mappés** : les champs GLPI qui n'ont pas de champ Mercator dédié (ex. numéro de série alternatif, statut, type de baie…) sont automatiquement sérialisés à la suite de la description au format `"nom_champ" : "valeur"`. Les champs vides, nuls ou à 0 sont ignorés. Les structures complexes (`_networkports`, `_devices`…) sont également ignorées.
 
@@ -787,7 +787,7 @@ class MonitorMapper
         return array_filter([
             'name'        => $item['name'],
             // ext_refs (tag {GLPI}N) est ajouté automatiquement par GlpiSyncService —
-            // ne pas l'inclure ici, et ne pas préfixer description par [glpi_id:N].
+            // ne pas l'inclure ici, ni l'identifiant GLPI dans description.
             'description' => $this->buildDescription($item, [/* champs déjà mappés ci-dessous */]),
             // ... autres champs
         ], fn($v) => $v !== null);
