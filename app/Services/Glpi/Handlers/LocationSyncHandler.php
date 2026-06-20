@@ -22,7 +22,7 @@ class LocationSyncHandler implements SyncHandler
     public function glpiQueryParams(): array
     {
         return [
-            'range'            => '0-999',
+            'range' => '0-999',
             'expand_dropdowns' => 1,
         ];
     }
@@ -32,9 +32,15 @@ class LocationSyncHandler implements SyncHandler
         return false;
     }
 
+    /**
+     * Les Location racines (sans parent) deviennent un Site (cf. SiteSyncHandler) :
+     * seules les Location non racines passent par ce handler pour devenir un Building.
+     */
     public function filterItem(array $item): bool
     {
-        return true;
+        $parent = $item['locations_id'] ?? 0;
+
+        return ! ($parent === 0 || $parent === '0' || $parent === null || $parent === '');
     }
 
     public function map(array $glpiItem, array $context): array
