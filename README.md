@@ -29,6 +29,7 @@
   - [Par entité GLPI](#par-entité-glpi)
   - [Par statut](#par-statut)
   - [Par sous-type (Computer)](#par-sous-type-computer)
+  - [Par sous-type (NetworkEquipment)](#par-sous-type-networkequipment)
 - [Planification automatique](#planification-automatique)
 - [Logs et diagnostic](#logs-et-diagnostic)
   - [Activer les logs debug](#activer-les-logs-debug)
@@ -58,16 +59,23 @@ Le connecteur repose sur le patron **Strategy** : chaque type d'actif est géré
 GlpiSyncCommand              — Commande CLI (glpi:sync), options, affichage
 GlpiSyncService              — Orchestration : récupération, filtrage, création/mise à jour
   ├── SyncHandler             — Interface de chaque type d'actif
-  │   ├── WorkstationSyncHandler      → endpoint: workstations
-  │   ├── ApplicationSyncHandler      → endpoint: applications
-  │   ├── PeripheralSyncHandler       → endpoint: peripherals
-  │   ├── PhoneSyncHandler            → endpoint: phones
-  │   ├── NetworkDeviceSyncHandler    → endpoint: physical-switches
-  │   ├── RackSyncHandler             → endpoint: bays
-  │   ├── ApplianceSyncHandler        → endpoint: activities
-  │   ├── LocationSyncHandler         → endpoint: buildings
-  │   ├── LogicalServerSyncHandler    → endpoint: logical-servers
-  │   └── PhysicalServerSyncHandler   → endpoint: physical-servers
+  │   ├── WorkstationSyncHandler            → endpoint: workstations
+  │   ├── ApplicationSyncHandler            → endpoint: applications
+  │   ├── PeripheralSyncHandler             → endpoint: peripherals
+  │   ├── PhoneSyncHandler                  → endpoint: phones
+  │   ├── NetworkDeviceSyncHandler          → endpoint: physical-switches
+  │   ├── RouterSyncHandler                 → endpoint: physical-routers
+  │   ├── WifiTerminalSyncHandler           → endpoint: wifi-terminals
+  │   ├── PhysicalSecurityDeviceSyncHandler → endpoint: physical-security-devices
+  │   ├── StorageDeviceSyncHandler          → endpoint: storage-devices
+  │   ├── RackSyncHandler                   → endpoint: bays
+  │   ├── ApplianceSyncHandler              → endpoint: activities
+  │   ├── SiteSyncHandler                   → endpoint: sites
+  │   ├── LocationSyncHandler               → endpoint: buildings
+  │   ├── LogicalServerSyncHandler          → endpoint: logical-servers
+  │   ├── PhysicalServerSyncHandler         → endpoint: physical-servers
+  │   ├── CertificateSyncHandler            → endpoint: certificates
+  │   └── ClusterSyncHandler                → endpoint: clusters
   ├── syncLinks()             — Liens workstation ↔ application (via Computer_SoftwareVersion)
   ├── syncActivityLinks()     — Liens activité ↔ application (via Appliance._items.Software)
   └── Mapper                  — Transformation champ à champ GLPI → Mercator
@@ -75,9 +83,9 @@ GlpiClient                   — Client HTTP GLPI (API REST v1, session-token)
 MercatorClient               — Client HTTP Mercator (API REST, Bearer token)
 ```
 
-**Clé de réconciliation** : les actifs sont mis en correspondance par `strtolower(name)` entre les deux systèmes.
+**Clé de réconciliation** : les actifs sont mis en correspondance prioritairement via le champ Mercator `ext_refs`, qui porte un tag `{GLPI}<id>` (valeur multivaluée, séparée par `|`, ex. `{PROXMOX}vm123|{GLPI}42`). `strtolower(name)` n'est utilisé qu'en fallback, pour les items Mercator pas encore tagués (premier sync après migration, ou items créés manuellement portant le même nom). Une fois la correspondance établie, `ext_refs` est renseigné/mis à jour, ce qui garantit que les synchronisations suivantes (y compris après un renommage côté GLPI) continuent de cibler le même enregistrement Mercator. `ext_refs` est calculé de façon centralisée par `GlpiSyncService` (pas par les Mappers) et fusionné pour préserver les références issues d'autres sources.
 
-**Traçabilité** : à la création, l'identifiant GLPI est inscrit dans le champ `description` sous la forme `[glpi_id:42]`.
+**Traçabilité** : l'identifiant GLPI n'est plus inscrit dans le champ `description` (l'ancien préfixe `[glpi_id:N]` a été retiré de tous les mappers, y compris `CertificateMapper` et `ClusterMapper`) ; il est désormais uniquement porté par `ext_refs`. `description` ne contient plus que le `comment` GLPI suivi des champs non mappés sérialisés.
 
 **Champs non mappés** : les champs GLPI qui n'ont pas de champ Mercator dédié (ex. numéro de série alternatif, statut, type de baie…) sont automatiquement sérialisés à la suite de la description au format `"nom_champ" : "valeur"`. Les champs vides, nuls ou à 0 sont ignorés. Les structures complexes (`_networkports`, `_devices`…) sont également ignorées.
 
@@ -157,6 +165,11 @@ Copiez `.env.sample` vers `.env` et renseignez les valeurs :
 | `GLPI_COMPUTER_TYPES_WORKSTATIONS` | _(vide)_ | Noms ou IDs de `computertypes` routés vers `workstations` ; vide = tous | `Poste de travail,Laptop` |
 | `GLPI_COMPUTER_TYPES_LOGICAL_SERVERS` | _(vide)_ | Noms ou IDs de `computertypes` routés vers `logical-servers` ; vide = désactivé | `Machine virtuelle` |
 | `GLPI_COMPUTER_TYPES_PHYSICAL_SERVERS` | _(vide)_ | Noms ou IDs de `computertypes` routés vers `physical-servers` ; vide = désactivé | `Serveur physique` |
+| `GLPI_NETWORK_DEVICE_TYPES_SWITCHES` | _(vide)_ | Noms ou IDs de `networkequipmenttypes` routés vers `physical-switches` ; vide = **tous** les `NetworkEquipment` non repris par les filtres ci-dessous (comportement historique) | `Switch` |
+| `GLPI_NETWORK_DEVICE_TYPES_ROUTERS` | _(vide)_ | Noms ou IDs de `networkequipmenttypes` routés vers `physical-routers` ; vide = désactivé | `Routeur` |
+| `GLPI_NETWORK_DEVICE_TYPES_WIFI_TERMINALS` | _(vide)_ | Noms ou IDs de `networkequipmenttypes` routés vers `wifi-terminals` ; vide = désactivé | `Borne Wifi` |
+| `GLPI_NETWORK_DEVICE_TYPES_PHYSICAL_SECURITY_DEVICES` | _(vide)_ | Noms ou IDs de `networkequipmenttypes` routés vers `physical-security-devices` ; vide = désactivé | `Caméra IP` |
+| `GLPI_NETWORK_DEVICE_TYPES_STORAGE_DEVICES` | _(vide)_ | Noms ou IDs de `networkequipmenttypes` routés vers `storage-devices` ; vide = désactivé | `Baie de stockage` |
 | `MERCATOR_URL` | — | URL de base de l'instance Mercator (sans slash final) | `https://mercator.acme.fr` |
 | `MERCATOR_LOGIN` | — | Email du compte Mercator utilisé pour l'API | `sync@acme.fr` |
 | `MERCATOR_PASSWORD` | — | Mot de passe du compte Mercator | `motdepasse` |
@@ -214,25 +227,33 @@ Lance la synchronisation de tous les types dans l'ordre recommandé (voir ci-des
 Certains types doivent être synchronisés avant d'autres pour que les liens et résolutions de FK fonctionnent correctement :
 
 ```
- 1. locations       → crée les buildings Mercator (building_id utilisé par les autres types)
- 2. applications    → crée le catalogue applicatif (nécessaire pour links et activity_links)
- 3. appliances      → crée les activities (nécessaire pour activity_links)
- 4. workstations    ┐
- 5. peripherals     │
- 6. phones          │ peuvent s'exécuter dans n'importe quel ordre
- 7. network_devices │ une fois que locations est fait
- 8. racks           │
- 9. logical_servers │
-10. physical_servers┘
-11. links           → lie les workstations ↔ applications (nécessite 1 et 2)
-12. activity_links  → lie les activities ↔ applications (nécessite 2 et 3)
+ 1. sites                       → crée les sites Mercator (racines des locations GLPI)
+ 2. locations                   → crée les buildings Mercator (building_id/site_id utilisés par les autres types)
+ 3. applications                → crée le catalogue applicatif (nécessaire pour links et activity_links)
+ 4. appliances                  → crée les activities (nécessaire pour activity_links)
+ 5. workstations                ┐
+ 6. peripherals                 │
+ 7. phones                      │
+ 8. network_devices             │ peuvent s'exécuter dans n'importe quel ordre
+ 9. routers                     │ une fois que sites/locations sont faits
+10. wifi_terminals              │
+11. physical_security_devices   │
+12. storage_devices             │
+13. racks                       │
+14. logical_servers             │
+15. physical_servers            ┘
+16. links                       → lie les workstations ↔ applications (nécessite 3 et 5)
+17. activity_links               → lie les activities ↔ applications (nécessite 3 et 4)
 ```
 
 Cet ordre est appliqué automatiquement lors de la synchronisation complète (`php application glpi:sync`).
 
+`certificates` et `clusters` ne font **pas** partie de la synchronisation complète par défaut : ils ne sont exécutés que si on les demande explicitement via `--type=certificates` / `--type=clusters`.
+
 ### Synchronisation par type
 
 ```bash
+php application glpi:sync --type=sites
 php application glpi:sync --type=locations
 php application glpi:sync --type=applications
 php application glpi:sync --type=appliances
@@ -240,11 +261,17 @@ php application glpi:sync --type=workstations
 php application glpi:sync --type=peripherals
 php application glpi:sync --type=phones
 php application glpi:sync --type=network_devices
+php application glpi:sync --type=routers
+php application glpi:sync --type=wifi_terminals
+php application glpi:sync --type=physical_security_devices
+php application glpi:sync --type=storage_devices
 php application glpi:sync --type=racks
 php application glpi:sync --type=logical_servers
 php application glpi:sync --type=physical_servers
-php application glpi:sync --type=links           # liens workstation ↔ application
-php application glpi:sync --type=activity_links  # liens activité ↔ application
+php application glpi:sync --type=certificates     # pas inclus dans la sync complète, opt-in
+php application glpi:sync --type=clusters         # pas inclus dans la sync complète, opt-in
+php application glpi:sync --type=links            # liens workstation ↔ application
+php application glpi:sync --type=activity_links   # liens activité ↔ application
 ```
 
 ### Options disponibles
@@ -285,31 +312,48 @@ php application glpi:sync --type=logical_servers --type=physical_servers
 
 | Option `--type` | Source GLPI | Endpoint Mercator | Nature |
 |---|---|---|---|
+| `sites` | `Location` (racines, sans parent) | `sites` | actifs |
 | `locations` | `Location` | `buildings` | actifs |
 | `applications` | `Software` | `applications` | actifs |
 | `appliances` | `Appliance` | `activities` | actifs |
 | `workstations` | `Computer` (filtré par `GLPI_COMPUTER_TYPES_WORKSTATIONS`) | `workstations` | actifs |
 | `peripherals` | `Peripheral` | `peripherals` | actifs |
 | `phones` | `Phone` | `phones` | actifs |
-| `network_devices` | `NetworkEquipment` | `physical-switches` | actifs |
+| `network_devices` | `NetworkEquipment` (filtré par `GLPI_NETWORK_DEVICE_TYPES_SWITCHES` ; vide = tous les `NetworkEquipment` non repris par les filtres routers/wifi_terminals/physical_security_devices/storage_devices) | `physical-switches` | actifs |
+| `routers` | `NetworkEquipment` (filtré par `GLPI_NETWORK_DEVICE_TYPES_ROUTERS`, opt-in) | `physical-routers` | actifs |
+| `wifi_terminals` | `NetworkEquipment` (filtré par `GLPI_NETWORK_DEVICE_TYPES_WIFI_TERMINALS`, opt-in) | `wifi-terminals` | actifs |
+| `physical_security_devices` | `NetworkEquipment` (filtré par `GLPI_NETWORK_DEVICE_TYPES_PHYSICAL_SECURITY_DEVICES`, opt-in) | `physical-security-devices` | actifs |
+| `storage_devices` | `NetworkEquipment` (filtré par `GLPI_NETWORK_DEVICE_TYPES_STORAGE_DEVICES`, opt-in) | `storage-devices` | actifs |
 | `racks` | `Rack` | `bays` | actifs |
 | `logical_servers` | `Computer` (filtré par `GLPI_COMPUTER_TYPES_LOGICAL_SERVERS`) | `logical-servers` | actifs |
 | `physical_servers` | `Computer` (filtré par `GLPI_COMPUTER_TYPES_PHYSICAL_SERVERS`) | `physical-servers` | actifs |
+| `certificates` | `Certificate` (pas dans la sync complète par défaut) | `certificates` | actifs |
+| `clusters` | `Cluster` (pas dans la sync complète par défaut) | `clusters` | actifs |
 | `links` | `Computer_SoftwareVersion` | pivot `workstation_application` | liens |
 | `activity_links` | `Appliance._items.Software` | pivot `activity_application` | liens |
 
 ### Détail des champs par type
+
+#### Sites (`Location` racine → `sites`)
+
+| Champ GLPI | Champ Mercator |
+|---|---|
+| `name` | `name` |
+| `comment` | `description` |
+| Champs non mappés | sérialisés dans `description` |
+
+> Seules les `Location` GLPI sans parent (`locations_id` vide ou `0`) deviennent un Site Mercator. Les `Location` (`buildings`) racines pointent vers le Site créé pour la même racine — **synchroniser `sites` avant `locations`.**
 
 #### Bâtiments (`Location` → `buildings`)
 
 | Champ GLPI | Champ Mercator |
 |---|---|
 | `name` | `name` |
-| `comment` | `description` (préfixé de `[glpi_id:N]`) |
-| `locations_id` (location parente) | `building_id` (résolution par nom) |
+| `comment` | `description` |
+| `locations_id` (location parente) | `building_id` (résolution par nom) ; hérite aussi `site_id` du parent (ou du Site racine si la Location est elle-même une racine) |
 | Champs non mappés (adresse, ville…) | sérialisés dans `description` |
 
-> Les bâtiments créés ici servent de référence pour résoudre `building_id` et `site_id` dans tous les autres types d'actifs (workstations, physical-switches…). **Synchroniser `locations` en premier.**
+> Les bâtiments créés ici servent de référence pour résoudre `building_id` et `site_id` dans tous les autres types d'actifs (workstations, physical-switches…). **Synchroniser `sites` puis `locations` en premier.**
 >
 > La hiérarchie des localisations GLPI (salle → bâtiment parent) est préservée via `building_id`. Les données géographiques n'ayant pas de champ dédié dans le modèle `buildings` Mercator (adresse, code postal, ville, pays, GPS) sont sérialisées dans `description`.
 
@@ -318,7 +362,7 @@ php application glpi:sync --type=logical_servers --type=physical_servers
 | Champ GLPI | Champ Mercator |
 |---|---|
 | `name` | `name` + `product` |
-| `comment` | `description` (préfixé de `[glpi_id:N]`) |
+| `comment` | `description` |
 | `manufacturers_id` | `vendor` + `editor` |
 | `softwarecategories_id` | `type` |
 | `users_id_tech` | `responsible` |
@@ -331,15 +375,17 @@ php application glpi:sync --type=logical_servers --type=physical_servers
 | Champ GLPI | Champ Mercator |
 |---|---|
 | `name` | `name` |
-| `comment` | `description` (préfixé de `[glpi_id:N]`) |
+| `comment` | `description` |
 | `users_id_tech` | `responsible` |
 
-#### Postes de travail (`Computer` → `workstations`)
+#### Postes de travail / serveurs logiques / serveurs physiques (`Computer` → `workstations` / `logical-servers` / `physical-servers`)
+
+`LogicalServerMapper` et `PhysicalServerMapper` délèguent entièrement à `WorkstationMapper` — seul le filtre de sous-type (`GLPI_COMPUTER_TYPES_*`) et l'endpoint Mercator changent.
 
 | Champ GLPI | Champ Mercator |
 |---|---|
 | `name` | `name` |
-| `comment` | `description` (préfixé de `[glpi_id:N]`) |
+| `comment` | `description` |
 | `computertypes_id` | `type` |
 | `manufacturers_id` | `manufacturer` |
 | `computermodels_id` | `model` |
@@ -350,32 +396,107 @@ php application glpi:sync --type=logical_servers --type=physical_servers
 | `locations_id` | `building_id` + `site_id` (résolution par nom) |
 | Premier port IPv4 | `address_ip` |
 | Premier port MAC | `mac_address` |
+| Type de port (Ethernet/Wifi) | `network_port_type` |
 | `ram` | `memory` (formaté en Go ou Mo) |
 | Premier CPU (`_devices`) | `cpu` |
 | Somme des disques | `disk` |
+| `date_last_boot` | `last_inventory_date` |
+| `_infocoms.order_date` | `warranty_start_date` |
 | `_infocoms.buy_date` | `purchase_date` |
 | `_infocoms.warranty_expiration` | `warranty_end_date` |
+| `_infocoms.warranty_duration` | `warranty_period` (formaté en mois) |
+| `_infocoms.value` | `fin_value` |
 | `"GLPI"` | `update_source` |
 
-#### Équipements réseau (`NetworkEquipment` → `physical-switches`)
+#### Équipements réseau — switches (`NetworkEquipment` → `physical-switches`)
 
 | Champ GLPI | Champ Mercator |
 |---|---|
 | `name` | `name` |
-| `comment` | `description` (préfixé de `[glpi_id:N]`) |
+| `comment` | `description` |
 | `networkequipmenttypes_id` | `type` |
 | `manufacturers_id` | `vendor` |
 | `networkequipmentmodels_id` | `product` |
 | `locations_id` | `building_id` + `site_id` (résolution par nom) |
 | Champs non mappés (serial, statut…) | sérialisés dans `description` |
 
+#### Équipements réseau — routeurs (`NetworkEquipment` → `physical-routers`)
+
+Filtré par `GLPI_NETWORK_DEVICE_TYPES_ROUTERS` (opt-in, vide = aucun équipement synchronisé).
+
+| Champ GLPI | Champ Mercator |
+|---|---|
+| `name` | `name` |
+| `comment` | `description` |
+| `networkequipmenttypes_id` | `type` |
+| `locations_id` | `building_id` + `site_id` (résolution par nom) |
+
+#### Équipements réseau — bornes Wifi (`NetworkEquipment` → `wifi-terminals`)
+
+Filtré par `GLPI_NETWORK_DEVICE_TYPES_WIFI_TERMINALS` (opt-in, vide = aucun équipement synchronisé).
+
+| Champ GLPI | Champ Mercator |
+|---|---|
+| `name` | `name` |
+| `comment` | `description` |
+| `networkequipmenttypes_id` | `type` |
+| `manufacturers_id` | `vendor` |
+| `networkequipmentmodels_id` | `product` |
+| `locations_id` | `building_id` + `site_id` (résolution par nom) |
+| Premier port IPv4 | `address_ip` |
+
+#### Équipements réseau — dispositifs de sécurité physique (`NetworkEquipment` → `physical-security-devices`)
+
+Filtré par `GLPI_NETWORK_DEVICE_TYPES_PHYSICAL_SECURITY_DEVICES` (opt-in, vide = aucun équipement synchronisé).
+
+| Champ GLPI | Champ Mercator |
+|---|---|
+| `name` | `name` |
+| `comment` | `description` |
+| `networkequipmenttypes_id` | `type` |
+| `locations_id` | `building_id` + `site_id` (résolution par nom) |
+| Premier port IPv4 | `address_ip` |
+
+#### Équipements réseau — dispositifs de stockage (`NetworkEquipment` → `storage-devices`)
+
+Filtré par `GLPI_NETWORK_DEVICE_TYPES_STORAGE_DEVICES` (opt-in, vide = aucun équipement synchronisé).
+
+| Champ GLPI | Champ Mercator |
+|---|---|
+| `name` | `name` |
+| `comment` | `description` |
+| `networkequipmenttypes_id` | `type` |
+| `locations_id` | `building_id` + `site_id` (résolution par nom) |
+| Premier port IPv4 | `address_ip` |
+
 #### Baies (`Rack` → `bays`)
 
 | Champ GLPI | Champ Mercator |
 |---|---|
 | `name` | `name` |
-| `comment` | `description` (préfixé de `[glpi_id:N]`) |
+| `comment` | `description` |
 | `locations_id` | `room_id` (résolution par nom dans les bâtiments Mercator) |
+
+#### Certificats (`Certificate` → `certificates`)
+
+| Champ GLPI | Champ Mercator |
+|---|---|
+| `name` | `name` |
+| `comment` | `description` |
+| `certificatetypes_id` | `type` |
+| `states_id` | `status` |
+| `date_expiration` | `expiration_date` |
+| `"GLPI"` | `update_source` |
+
+#### Clusters (`Cluster` → `clusters`)
+
+| Champ GLPI | Champ Mercator |
+|---|---|
+| `name` | `name` |
+| `comment` | `description` |
+| `clustertypes_id` | `type` |
+| `states_id` | `status` |
+| `"GLPI"` | `update_source` |
 
 #### Liens workstation ↔ application (`links`)
 
@@ -464,6 +585,29 @@ GLPI_COMPUTER_TYPES_PHYSICAL_SERVERS=Serveur physique
 GLPI_ALLOWED_STATES_COMPUTERS=En production
 GLPI_ENTITY_ID=1
 ```
+
+### Par sous-type (NetworkEquipment)
+
+De façon symétrique, le type GLPI `NetworkEquipment` regroupe switches, routeurs, bornes Wifi, dispositifs de sécurité physique et dispositifs de stockage. Chaque sous-type est routé vers son propre endpoint Mercator via `GLPI_NETWORK_DEVICE_TYPES_*`.
+
+```ini
+# Switches → physical-switches
+GLPI_NETWORK_DEVICE_TYPES_SWITCHES=Switch
+
+# Routeurs → physical-routers
+GLPI_NETWORK_DEVICE_TYPES_ROUTERS=Routeur
+
+# Bornes Wifi → wifi-terminals
+GLPI_NETWORK_DEVICE_TYPES_WIFI_TERMINALS=Borne Wifi
+
+# Caméras / contrôleurs d'accès → physical-security-devices
+GLPI_NETWORK_DEVICE_TYPES_PHYSICAL_SECURITY_DEVICES=Caméra IP
+
+# Baies de stockage réseau → storage-devices
+GLPI_NETWORK_DEVICE_TYPES_STORAGE_DEVICES=Baie de stockage
+```
+
+> **Important** : `GLPI_NETWORK_DEVICE_TYPES_SWITCHES` vide = tous les `NetworkEquipment` non capturés par les autres filtres vont dans `physical-switches` (comportement historique, rétrocompatible). `GLPI_NETWORK_DEVICE_TYPES_ROUTERS`, `_WIFI_TERMINALS`, `_PHYSICAL_SECURITY_DEVICES` et `_STORAGE_DEVICES` vides = **désactivé** (opt-in explicite requis) — aucun `NetworkEquipment` n'est routé vers ces endpoints.
 
 ---
 
@@ -627,32 +771,38 @@ grep "\[activity_links\]" storage/logs/laravel.log
 
 ## Étendre le connecteur
 
-Pour ajouter un nouveau type d'actif GLPI (ex. `Certificate` → `certificates`) :
+Pour ajouter un nouveau type d'actif GLPI (ex. `Monitor` → `monitors`) :
 
-**1. Créer le mapper** `app/Services/Glpi/Mappers/CertificateMapper.php`
+**1. Créer le mapper** `app/Services/Glpi/Mappers/MonitorMapper.php`
 
 ```php
-class CertificateMapper
+use App\Services\Glpi\Mappers\Concerns\AppendsUnmappedFields;
+
+class MonitorMapper
 {
+    use AppendsUnmappedFields;
+
     public function map(array $item, array $context): array
     {
         return array_filter([
             'name'        => $item['name'],
-            'description' => '[glpi_id:' . $item['id'] . '] ' . trim($item['comment'] ?? ''),
+            // ext_refs (tag {GLPI}N) est ajouté automatiquement par GlpiSyncService —
+            // ne pas l'inclure ici, et ne pas préfixer description par [glpi_id:N].
+            'description' => $this->buildDescription($item, [/* champs déjà mappés ci-dessous */]),
             // ... autres champs
         ], fn($v) => $v !== null);
     }
 }
 ```
 
-**2. Créer le handler** `app/Services/Glpi/Handlers/CertificateSyncHandler.php`
+**2. Créer le handler** `app/Services/Glpi/Handlers/MonitorSyncHandler.php`
 
 ```php
-class CertificateSyncHandler implements SyncHandler
+class MonitorSyncHandler implements SyncHandler
 {
-    public function __construct(private readonly CertificateMapper $mapper) {}
-    public function glpiItemType(): string        { return 'Certificate'; }
-    public function mercatorEndpoint(): string    { return 'certificates'; }
+    public function __construct(private readonly MonitorMapper $mapper) {}
+    public function glpiItemType(): string        { return 'Monitor'; }
+    public function mercatorEndpoint(): string    { return 'monitors'; }
     public function glpiQueryParams(): array      { return ['range' => '0-999', 'expand_dropdowns' => 1]; }
     public function processOrphans(): bool        { return false; }
     public function filterItem(array $item): bool { return true; }
@@ -663,16 +813,16 @@ class CertificateSyncHandler implements SyncHandler
 **3. Enregistrer** dans `AppServiceProvider::register()` :
 
 ```php
-$this->app->singleton(CertificateMapper::class);
-$this->app->singleton(CertificateSyncHandler::class, fn($app) =>
-    new CertificateSyncHandler($app->make(CertificateMapper::class))
+$this->app->singleton(MonitorMapper::class);
+$this->app->singleton(MonitorSyncHandler::class, fn($app) =>
+    new MonitorSyncHandler($app->make(MonitorMapper::class))
 );
 ```
 
-**4. Ajouter au tableau** `$handlers` de `GlpiSyncCommand` et à `$defaultTypes` à la bonne position :
+**4. Ajouter au tableau** `$handlers` de `GlpiSyncCommand` (et à `$defaultTypes` si le type doit faire partie de la synchronisation complète — `certificates` et `clusters` n'y figurent volontairement pas, voir [Ordre d'exécution et dépendances](#ordre-dexécution-et-dépendances)) :
 
 ```php
-'certificates' => CertificateSyncHandler::class,
+'monitors' => MonitorSyncHandler::class,
 ```
 
 ---
@@ -702,16 +852,26 @@ Les tests utilisent **Mockery** — aucun appel réseau réel. Les fixtures JSON
 | `PeripheralMapperTest` | Mapping d'un Peripheral GLPI |
 | `PhoneMapperTest` | Mapping d'un Phone GLPI |
 | `NetworkDeviceMapperTest` | Mapping d'un NetworkEquipment → PhysicalSwitch |
+| `RouterMapperTest` | Mapping d'un NetworkEquipment → PhysicalRouter |
+| `WifiTerminalMapperTest` | Mapping d'un NetworkEquipment → WifiTerminal |
+| `PhysicalSecurityDeviceMapperTest` | Mapping d'un NetworkEquipment → PhysicalSecurityDevice |
+| `StorageDeviceMapperTest` | Mapping d'un NetworkEquipment → StorageDevice |
 | `RackMapperTest` | Mapping d'un Rack → Bay |
 | `ApplianceMapperTest` | Mapping d'une Appliance → Activity |
+| `SiteMapperTest` | Mapping d'une Location racine → Site |
 | `LocationMapperTest` | Mapping d'une Location → Building |
 | `GlpiSyncServiceTest` | Logique create / update / orphelins |
 | `GlpiSyncServiceLinksTest` | Liens workstation ↔ application (`syncLinks`) |
+| `GlpiSyncServiceLocationHierarchyTest` | Résolution `building_id`/`site_id` à travers la hiérarchie Location → Site |
 | `GlpiActivityLinksTest` | Liens activité ↔ application (`syncActivityLinks`) |
 | `GlpiEntityFilterTest` | Filtrage par entité GLPI (`--entity`, `GLPI_ENTITY_ID`) |
 | `GlpiStatusFilterTest` | Filtrage par statut (`GLPI_ALLOWED_STATES*`) |
 | `ComputerTypeFilterTest` | Filtrage par sous-type Computer (`GLPI_COMPUTER_TYPES_*`) |
-| `GlpiSyncCommandTest` | Intégration commande CLI |
+| `NetworkDeviceTypeFilterTest` | Filtrage par sous-type NetworkEquipment (`GLPI_NETWORK_DEVICE_TYPES_*`) |
+| `SiteSyncHandlerTest` | Filtre `filterItem()` du `SiteSyncHandler` (Location racine uniquement) |
+| `GlpiSyncCommandTest` (`tests/Feature/`) | Intégration commande CLI |
+
+> Il n'existe pas (encore) de test dédié pour `CertificateMapper`/`CertificateSyncHandler` ni `ClusterMapper`/`ClusterSyncHandler`.
 
 ---
 
