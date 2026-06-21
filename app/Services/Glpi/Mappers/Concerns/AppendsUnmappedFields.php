@@ -50,7 +50,7 @@ trait AppendsUnmappedFields
             $extras[] = '"'.$key.'" : "'.$value.'"';
         }
 
-        $description = empty($extras) ? $base : trim($base."\n".implode("\n", $extras));
+        $description = empty($extras) ? $base : trim($base."<br>".implode("<br>", $extras));
 
         return $description === '' ? null : $description;
     }
