@@ -30,6 +30,14 @@ function buildingsMap(): array
     return $map;
 }
 
+function sitesMap(): array
+{
+    return [
+        'siège social' => 1,
+        'site distant' => 3,
+    ];
+}
+
 // ── Champs de base ────────────────────────────────────────────────────────────
 
 it('mappe le nom du poste', function () {
@@ -149,6 +157,26 @@ it('résout le building_id depuis le chemin complet renvoyé par GLPI pour une s
     $result = (new WorkstationMapper)->map(
         glpiComputer(['locations_id' => 'Siège Social > Salle 101']),
         ['buildings_map' => buildingsMap()]
+    );
+
+    expect($result['building_id'])->toBe(5);
+    expect($result['site_id'])->toBe(1);
+});
+
+it('résout le site_id quand la localisation est un site et non un building', function () {
+    $result = (new WorkstationMapper)->map(
+        glpiComputer(['locations_id' => 'Site Distant']),
+        ['buildings_map' => buildingsMap(), 'sites_map' => sitesMap()]
+    );
+
+    expect($result['site_id'])->toBe(3);
+    expect($result)->not->toHaveKey('building_id');
+});
+
+it('privilégie le building au site quand les deux correspondent au même nom', function () {
+    $result = (new WorkstationMapper)->map(
+        glpiComputer(['locations_id' => 'Salle 101']),
+        ['buildings_map' => buildingsMap(), 'sites_map' => sitesMap()]
     );
 
     expect($result['building_id'])->toBe(5);

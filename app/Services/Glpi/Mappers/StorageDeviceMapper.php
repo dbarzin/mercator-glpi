@@ -23,7 +23,8 @@ class StorageDeviceMapper
     public function map(array $item, array $context): array
     {
         $buildingsMap = $context['buildings_map'] ?? [];
-        $building     = $this->resolveBuilding($item['locations_id'] ?? null, $buildingsMap);
+        $sitesMap     = $context['sites_map'] ?? [];
+        $building     = $this->resolveBuilding($item['locations_id'] ?? null, $buildingsMap, $sitesMap);
 
         return array_filter([
             'name'        => $item['name'],
@@ -37,7 +38,7 @@ class StorageDeviceMapper
         ], fn($v) => $v !== null);
     }
 
-    private function resolveBuilding(mixed $locationName, array $buildingsMap): ?array
+    private function resolveBuilding(mixed $locationName, array $buildingsMap, array $sitesMap = []): ?array
     {
         $leafName = $this->locationLeafName($locationName);
 
@@ -45,7 +46,17 @@ class StorageDeviceMapper
             return null;
         }
 
-        return $buildingsMap[strtolower($leafName)] ?? null;
+        $key = strtolower($leafName);
+
+        if (isset($buildingsMap[$key])) {
+            return $buildingsMap[$key];
+        }
+
+        if (isset($sitesMap[$key])) {
+            return ['id' => null, 'site_id' => $sitesMap[$key]];
+        }
+
+        return null;
     }
 
     private function extractIp(array $item): ?string

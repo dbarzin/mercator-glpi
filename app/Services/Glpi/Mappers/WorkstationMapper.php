@@ -19,7 +19,8 @@ class WorkstationMapper
     public function map(array $item, array $context): array
     {
         $buildingsMap = $context['buildings_map'] ?? [];
-        $building = $this->resolveBuilding($item['locations_id'] ?? null, $buildingsMap);
+        $sitesMap = $context['sites_map'] ?? [];
+        $building = $this->resolveBuilding($item['locations_id'] ?? null, $buildingsMap, $sitesMap);
 
         return array_filter([
             'name' => $item['name'],
@@ -59,10 +60,15 @@ class WorkstationMapper
     // -------------------------------------------------------------------------
 
     /**
-     * Résout le building depuis le nom de la salle GLPI.
-     * Retourne ['id' => int, 'site_id' => int|null] ou null si non trouvé.
+     * Résout le building (ou, à défaut, le site) depuis le nom de la salle GLPI.
+     *
+     * La Location GLPI d'un Computer peut désigner soit un Building (salle, étage…),
+     * soit directement une Location racine devenue un Site (cf. LocationMapper) :
+     * on cherche donc d'abord dans buildings_map, puis dans sites_map.
+     *
+     * Retourne ['id' => int|null, 'site_id' => int|null] ou null si non trouvé.
      */
-    private function resolveBuilding(mixed $locationName, array $buildingsMap): ?array
+    private function resolveBuilding(mixed $locationName, array $buildingsMap, array $sitesMap = []): ?array
     {
         $leafName = $this->locationLeafName($locationName);
 
@@ -70,7 +76,17 @@ class WorkstationMapper
             return null;
         }
 
-        return $buildingsMap[strtolower($leafName)] ?? null;
+        $key = strtolower($leafName);
+
+        if (isset($buildingsMap[$key])) {
+            return $buildingsMap[$key];
+        }
+
+        if (isset($sitesMap[$key])) {
+            return ['id' => null, 'site_id' => $sitesMap[$key]];
+        }
+
+        return null;
     }
 
     // -------------------------------------------------------------------------

@@ -94,6 +94,16 @@ it('résout building_id et site_id depuis le nom de la salle', function () {
     expect($result['site_id'])->toBe(1);
 });
 
+it('résout le site_id quand la localisation est un site et non un building', function () {
+    $result = (new PeripheralMapper)->map(
+        glpiPeripheral(['locations_id' => 'Site Distant']),
+        ['buildings_map' => peripheralBuildingsMap(), 'sites_map' => ['site distant' => 3]]
+    );
+
+    expect($result['site_id'])->toBe(3);
+    expect($result)->not->toHaveKey('building_id');
+});
+
 it('laisse building_id et site_id absents si la salle est inconnue', function () {
     $result = (new PeripheralMapper)->map(
         glpiPeripheral(['locations_id' => 'Salle Inconnue']),
