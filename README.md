@@ -704,6 +704,42 @@ curl -H "Authorization: user_token $GLPI_USER_TOKEN" \
 # Attendu : {"session_token": "..."}
 ```
 
+#### Erreur 429 — « Too Many Attempts. »
+
+**Symptôme**
+L'API de Mercator renvoie un code HTTP `429 Too Many Attempts.`. La synchronisation
+s'interrompt et un lot d'assets peut ne pas être transmis.
+
+**Cause**
+Le connecteur effectue de nombreux appels successifs (un ou plusieurs par asset).
+Lorsque le volume dépasse le quota de requêtes autorisé par Mercator sur une fenêtre
+de temps donnée, le limiteur de débit (*rate limiter*) de l'API rejette les requêtes
+excédentaires.
+
+**Résolution**
+Augmentez le quota de l'API limiter dans le fichier `.env` **de Mercator**
+(et non celui du connecteur), puis videz le cache de configuration.
+
+```env
+# Nombre maximal de requêtes autorisées par unité de temps
+API_RATE_LIMIT=600
+# Unité de temps (en minutes)
+API_RATE_LIMIT_DECAY=1
+```
+
+Ces deux paramètres se lisent ainsi : **600 requêtes par tranche de 1 minute**.
+Adaptez `API_RATE_LIMIT` à votre volumétrie d'inventaire et à la capacité du serveur
+Mercator.
+
+Après modification, rechargez la configuration côté Mercator :
+
+```bash
+php artisan config:clear
+```
+
+> **Note** — Si l'erreur persiste malgré un quota élevé, vérifiez qu'aucun reverse
+> proxy ou WAF en amont de Mercator n'applique sa propre limitation de débit.
+
 #### Workstations non synchronisées (mauvais filtre de type ou de statut)
 
 Les ordinateurs existent dans GLPI mais n'apparaissent pas dans Mercator.
