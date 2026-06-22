@@ -475,7 +475,7 @@ Filtré par `GLPI_NETWORK_DEVICE_TYPES_STORAGE_DEVICES` (opt-in, vide = aucun é
 |---|---|
 | `name` | `name` |
 | `comment` | `description` |
-| `locations_id` | `room_id` (résolution par nom dans les bâtiments Mercator) |
+| `locations_id` | `building_id` + `site_id` (résolution par nom) |
 
 #### Certificats (`Certificate` → `certificates`)
 

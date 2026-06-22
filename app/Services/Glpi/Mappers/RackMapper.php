@@ -12,24 +12,33 @@ class RackMapper
     /**
      * Mappe un Rack GLPI (expand_dropdowns=1) vers un payload Mercator bays.
      *
-     * Mercator Bay : name, description, room_id (FK vers buildings).
+     * Mercator Bay : name, description, building_id (FK vers buildings), site_id.
      *
      * @param  array  $item     Rack GLPI brut
-     * @param  array  $context  ['buildings_map' => [...]]
+     * @param  array  $context  ['buildings_map' => [...], 'sites_map' => [...]]
      */
     public function map(array $item, array $context): array
     {
         $buildingsMap = $context['buildings_map'] ?? [];
-        $building     = $this->resolveBuilding($item['locations_id'] ?? null, $buildingsMap);
+        $sitesMap     = $context['sites_map'] ?? [];
+        $building     = $this->resolveBuilding($item['locations_id'] ?? null, $buildingsMap, $sitesMap);
 
         return array_filter([
             'name'        => $item['name'],
             'description' => $this->buildDescription($item, ['locations_id']),
-            'room_id'     => $building['id'] ?? null,
+            'building_id' => $building['id'] ?? null,
+            'site_id'     => $building['site_id'] ?? null,
         ], fn($v) => $v !== null);
     }
 
-    private function resolveBuilding(mixed $locationName, array $buildingsMap): ?array
+    /**
+     * Résout le building (ou, à défaut, le site) depuis le nom de la salle GLPI.
+     *
+     * La Location GLPI d'un Rack peut désigner soit un Building (salle, étage…),
+     * soit directement une Location racine devenue un Site (cf. LocationMapper) :
+     * on cherche donc d'abord dans buildings_map, puis dans sites_map.
+     */
+    private function resolveBuilding(mixed $locationName, array $buildingsMap, array $sitesMap = []): ?array
     {
         $leafName = $this->locationLeafName($locationName);
 
@@ -37,6 +46,16 @@ class RackMapper
             return null;
         }
 
-        return $buildingsMap[strtolower($leafName)] ?? null;
+        $key = strtolower($leafName);
+
+        if (isset($buildingsMap[$key])) {
+            return $buildingsMap[$key];
+        }
+
+        if (isset($sitesMap[$key])) {
+            return ['id' => null, 'site_id' => $sitesMap[$key]];
+        }
+
+        return null;
     }
 }
