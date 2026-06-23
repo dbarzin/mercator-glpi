@@ -229,21 +229,21 @@ Certains types doivent être synchronisés avant d'autres pour que les liens et 
 ```
  1. sites                       → crée les sites Mercator (racines des locations GLPI)
  2. locations                   → crée les buildings Mercator (building_id/site_id utilisés par les autres types)
- 3. applications                → crée le catalogue applicatif (nécessaire pour links et activity_links)
- 4. appliances                  → crée les activities (nécessaire pour activity_links)
- 5. workstations                ┐
- 6. peripherals                 │
- 7. phones                      │
- 8. network_devices             │ peuvent s'exécuter dans n'importe quel ordre
- 9. routers                     │ une fois que sites/locations sont faits
-10. wifi_terminals              │
-11. physical_security_devices   │
-12. storage_devices             │
-13. racks                       │
+ 3. racks                       → crée les bays Mercator (bay_id résolu par network_devices/routers/physical_security_devices/storage_devices ci-dessous)
+ 4. applications                → crée le catalogue applicatif (nécessaire pour links et activity_links)
+ 5. appliances                  → crée les activities (nécessaire pour activity_links)
+ 6. workstations                ┐
+ 7. peripherals                 │
+ 8. phones                      │
+ 9. network_devices             │ peuvent s'exécuter dans n'importe quel ordre
+10. routers                     │ une fois que sites/locations/racks sont faits
+11. wifi_terminals              │
+12. physical_security_devices   │
+13. storage_devices             │
 14. logical_servers             │
 15. physical_servers            ┘
-16. links                       → lie les workstations ↔ applications (nécessite 3 et 5)
-17. activity_links               → lie les activities ↔ applications (nécessite 3 et 4)
+16. links                       → lie les workstations ↔ applications (nécessite 4 et 6)
+17. activity_links               → lie les activities ↔ applications (nécessite 4 et 5)
 ```
 
 Cet ordre est appliqué automatiquement lors de la synchronisation complète (`php application glpi:sync`).
@@ -418,6 +418,7 @@ php application glpi:sync --type=logical_servers --type=physical_servers
 | `manufacturers_id` | `vendor` |
 | `networkequipmentmodels_id` | `product` |
 | `locations_id` | `building_id` + `site_id` (résolution par nom) |
+| Rack GLPI (relation `Item_Rack`) | `bay_id` (résolu via la bay Mercator déjà synchronisée) |
 | Champs non mappés (serial, statut…) | sérialisés dans `description` |
 
 #### Équipements réseau — routeurs (`NetworkEquipment` → `physical-routers`)
@@ -430,6 +431,7 @@ Filtré par `GLPI_NETWORK_DEVICE_TYPES_ROUTERS` (opt-in, vide = aucun équipemen
 | `comment` | `description` |
 | `networkequipmenttypes_id` | `type` |
 | `locations_id` | `building_id` + `site_id` (résolution par nom) |
+| Rack GLPI (relation `Item_Rack`) | `bay_id` (résolu via la bay Mercator déjà synchronisée) |
 
 #### Équipements réseau — bornes Wifi (`NetworkEquipment` → `wifi-terminals`)
 
@@ -455,6 +457,7 @@ Filtré par `GLPI_NETWORK_DEVICE_TYPES_PHYSICAL_SECURITY_DEVICES` (opt-in, vide 
 | `comment` | `description` |
 | `networkequipmenttypes_id` | `type` |
 | `locations_id` | `building_id` + `site_id` (résolution par nom) |
+| Rack GLPI (relation `Item_Rack`) | `bay_id` (résolu via la bay Mercator déjà synchronisée) |
 | Premier port IPv4 | `address_ip` |
 
 #### Équipements réseau — dispositifs de stockage (`NetworkEquipment` → `storage-devices`)
@@ -467,6 +470,7 @@ Filtré par `GLPI_NETWORK_DEVICE_TYPES_STORAGE_DEVICES` (opt-in, vide = aucun é
 | `comment` | `description` |
 | `networkequipmenttypes_id` | `type` |
 | `locations_id` | `building_id` + `site_id` (résolution par nom) |
+| Rack GLPI (relation `Item_Rack`) | `bay_id` (résolu via la bay Mercator déjà synchronisée) |
 | Premier port IPv4 | `address_ip` |
 
 #### Baies (`Rack` → `bays`)

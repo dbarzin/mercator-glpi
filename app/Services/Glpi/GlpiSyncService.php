@@ -3,6 +3,7 @@
 namespace App\Services\Glpi;
 
 use App\Services\Glpi\Contracts\GlpiClientInterface;
+use App\Services\Glpi\Contracts\SupportsBayResolution;
 use App\Services\Glpi\Contracts\SupportsGlpiItemDetail;
 use App\Services\Glpi\Contracts\SyncHandler;
 use App\Services\Mercator\Contracts\MercatorClientInterface;
@@ -138,6 +139,16 @@ class GlpiSyncService
         }
 
         $context = ['buildings_map' => $buildingsMap, 'sites_map' => $sitesMap];
+
+        // Résolution du bay_id (Item_Rack GLPI → Rack Mercator) : opt-in (cf.
+        // SupportsBayResolution) car elle implique de charger tous les Item_Rack
+        // GLPI et toutes les bays Mercator. Les Rack doivent avoir été
+        // synchronisés (cf. ordre dans GlpiSyncCommand, après les buildings) pour
+        // que racks_map contienne leur bay_id Mercator.
+        if ($handler instanceof SupportsBayResolution) {
+            $context['item_rack_map'] = $this->buildItemRackMap($glpi);
+            $context['racks_map'] = $this->buildRacksMap($mercator);
+        }
 
         // ── 6. GLPI → Mercator : créer ou mettre à jour ───────────────────────
 
@@ -565,6 +576,53 @@ class GlpiSyncService
 
         foreach ($mercator->getSites() as $site) {
             $map[strtolower($site['name'])] = $site['id'];
+        }
+
+        return $map;
+    }
+
+    // -------------------------------------------------------------------------
+    // Helpers — bays (Rack GLPI → bays Mercator)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Indexe les Item_Rack GLPI (relation item↔rack, table glpi_items_racks) :
+     * "{itemtype}_{items_id}" → racks_id. GLPI ne place pas cette relation sur
+     * l'item lui-même, il faut donc l'itemtype Item_Rack pour la résoudre.
+     */
+    private function buildItemRackMap(GlpiClientInterface $glpi): array
+    {
+        $map = [];
+
+        foreach ($glpi->getItems('Item_Rack', ['range' => '0-999']) as $itemRack) {
+            $itemType = $itemRack['itemtype'] ?? null;
+            $itemsId = $itemRack['items_id'] ?? null;
+            $racksId = $itemRack['racks_id'] ?? null;
+
+            if ($itemType === null || $itemsId === null || $racksId === null) {
+                continue;
+            }
+
+            $map[$itemType.'_'.$itemsId] = $racksId;
+        }
+
+        return $map;
+    }
+
+    /**
+     * Indexe les bays Mercator déjà synchronisées par leur Rack GLPI d'origine
+     * (tag {GLPI}id de ext_refs) : racks_id GLPI (chaîne) → bay_id Mercator.
+     */
+    private function buildRacksMap(MercatorClientInterface $mercator): array
+    {
+        $map = [];
+
+        foreach ($mercator->getAll('bays') as $bay) {
+            $glpiId = $this->extractGlpiId($bay['ext_refs'] ?? null);
+
+            if ($glpiId !== null) {
+                $map[(string) $glpiId] = $bay['id'];
+            }
         }
 
         return $map;

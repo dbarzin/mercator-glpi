@@ -3,11 +3,13 @@
 namespace App\Services\Glpi\Mappers;
 
 use App\Services\Glpi\Mappers\Concerns\AppendsUnmappedFields;
+use App\Services\Glpi\Mappers\Concerns\ResolvesGlpiBay;
 use App\Services\Glpi\Mappers\Concerns\ResolvesGlpiLocationName;
 
 class RouterMapper
 {
     use AppendsUnmappedFields;
+    use ResolvesGlpiBay;
     use ResolvesGlpiLocationName;
 
     /**
@@ -16,7 +18,7 @@ class RouterMapper
      * Mercator PhysicalRouter : name, description, type, site_id, building_id, bay_id.
      *
      * @param  array  $item     NetworkEquipment GLPI brut
-     * @param  array  $context  ['buildings_map' => [...]]
+     * @param  array  $context  ['buildings_map' => [...], 'item_rack_map' => [...], 'racks_map' => [...]]
      */
     public function map(array $item, array $context): array
     {
@@ -32,6 +34,7 @@ class RouterMapper
             'type'        => $this->nullable($item['networkequipmenttypes_id'] ?? null),
             'building_id' => $building['id'] ?? null,
             'site_id'     => $building['site_id'] ?? null,
+            'bay_id'      => $this->resolveBayId('NetworkEquipment', $item['id'], $context),
         ], fn($v) => $v !== null);
     }
 

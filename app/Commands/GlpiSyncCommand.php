@@ -107,9 +107,12 @@ class GlpiSyncCommand extends Command
         // types en dépendent (building_id/site_id, liens workstation/activity ↔ application).
         // sites avant locations : les Building (locations) racines référencent le Site
         // créé pour la même Location racine.
+        // racks juste après locations (et avant les types réseau) : ces derniers
+        // résolvent leur bay_id via les bays déjà synchronisées (cf. SupportsBayResolution).
         $defaultTypes = [
             'sites',
             'locations',
+            'racks',
             'applications',
             'appliances',
             'workstations',
@@ -120,7 +123,6 @@ class GlpiSyncCommand extends Command
             'wifi_terminals',
             'physical_security_devices',
             'storage_devices',
-            'racks',
             'logical_servers',
             'physical_servers',
             'links',

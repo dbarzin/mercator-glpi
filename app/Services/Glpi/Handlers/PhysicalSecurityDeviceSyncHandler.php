@@ -2,11 +2,12 @@
 
 namespace App\Services\Glpi\Handlers;
 
+use App\Services\Glpi\Contracts\SupportsBayResolution;
 use App\Services\Glpi\Contracts\SyncHandler;
 use App\Services\Glpi\Handlers\Concerns\MatchesGlpiDropdownType;
 use App\Services\Glpi\Mappers\PhysicalSecurityDeviceMapper;
 
-class PhysicalSecurityDeviceSyncHandler implements SyncHandler
+class PhysicalSecurityDeviceSyncHandler implements SyncHandler, SupportsBayResolution
 {
     use MatchesGlpiDropdownType;
 
