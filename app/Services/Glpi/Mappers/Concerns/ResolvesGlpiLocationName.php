@@ -17,7 +17,8 @@ trait ResolvesGlpiLocationName
             return null;
         }
 
-        $value = (string) $value;
+        // GLPI encode les entités HTML dans les chemins (ex. "A &#62; B" pour "A > B").
+        $value = html_entity_decode((string) $value, ENT_QUOTES | ENT_HTML5);
         $pos = strrpos($value, ' > ');
 
         return $pos === false ? $value : substr($value, $pos + 3);
