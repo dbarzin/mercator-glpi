@@ -149,32 +149,32 @@ Lors du premier démarrage, un wizard d'installation s'affiche dans le navigateu
 
 Copiez `.env.sample` vers `.env` et renseignez les valeurs :
 
-| Variable | Défaut | Description | Exemple |
-|---|---|---|---|
-| `GLPI_URL` | — | URL de base de l'instance GLPI (sans slash final) | `https://glpi.acme.fr` |
-| `GLPI_APP_TOKEN` | — | Token applicatif GLPI (Configuration → API → Clients de l'API) | `abc123…` |
-| `GLPI_USER_TOKEN` | — | Token utilisateur GLPI (Mon compte → Accès distant) | `xyz789…` |
-| `GLPI_ENTITY_ID` | _(vide)_ | ID de l'entité GLPI à synchroniser ; vide = toutes les entités | `3` |
-| `GLPI_ALLOWED_STATES` | _(vide)_ | Noms ou IDs de statuts autorisés, séparés par virgules ; vide = tous | `En production,En stock` |
-| `GLPI_ALLOWED_STATES_COMPUTERS` | _(vide)_ | Surcharge du filtre statut pour les `Computer` | `En production` |
-| `GLPI_ALLOWED_STATES_PHONES` | _(vide)_ | Surcharge du filtre statut pour les `Phone` | `En production` |
-| `GLPI_ALLOWED_STATES_PERIPHERALS` | _(vide)_ | Surcharge du filtre statut pour les `Peripheral` | — |
-| `GLPI_ALLOWED_STATES_SOFTWARE` | _(vide)_ | Surcharge du filtre statut pour les `Software` | — |
-| `GLPI_ALLOWED_STATES_NETWORK_EQUIPMENT` | _(vide)_ | Surcharge du filtre statut pour les `NetworkEquipment` | — |
-| `GLPI_ALLOWED_STATES_RACKS` | _(vide)_ | Surcharge du filtre statut pour les `Rack` | — |
-| `GLPI_COMPUTER_TYPES_WORKSTATIONS` | _(vide)_ | Noms ou IDs de `computertypes` routés vers `workstations` ; vide = tous | `Poste de travail,Laptop` |
-| `GLPI_COMPUTER_TYPES_LOGICAL_SERVERS` | _(vide)_ | Noms ou IDs de `computertypes` routés vers `logical-servers` ; vide = désactivé | `Machine virtuelle` |
-| `GLPI_COMPUTER_TYPES_PHYSICAL_SERVERS` | _(vide)_ | Noms ou IDs de `computertypes` routés vers `physical-servers` ; vide = désactivé | `Serveur physique` |
-| `GLPI_NETWORK_DEVICE_TYPES_SWITCHES` | _(vide)_ | Noms ou IDs de `networkequipmenttypes` routés vers `physical-switches` ; vide = **tous** les `NetworkEquipment` non repris par les filtres ci-dessous (comportement historique) | `Switch` |
-| `GLPI_NETWORK_DEVICE_TYPES_ROUTERS` | _(vide)_ | Noms ou IDs de `networkequipmenttypes` routés vers `physical-routers` ; vide = désactivé | `Routeur` |
-| `GLPI_NETWORK_DEVICE_TYPES_WIFI_TERMINALS` | _(vide)_ | Noms ou IDs de `networkequipmenttypes` routés vers `wifi-terminals` ; vide = désactivé | `Borne Wifi` |
-| `GLPI_NETWORK_DEVICE_TYPES_PHYSICAL_SECURITY_DEVICES` | _(vide)_ | Noms ou IDs de `networkequipmenttypes` routés vers `physical-security-devices` ; vide = désactivé | `Caméra IP` |
-| `GLPI_NETWORK_DEVICE_TYPES_STORAGE_DEVICES` | _(vide)_ | Noms ou IDs de `networkequipmenttypes` routés vers `storage-devices` ; vide = désactivé | `Baie de stockage` |
-| `MERCATOR_URL` | — | URL de base de l'instance Mercator (sans slash final) | `https://mercator.acme.fr` |
-| `MERCATOR_LOGIN` | — | Email du compte Mercator utilisé pour l'API | `sync@acme.fr` |
-| `MERCATOR_PASSWORD` | — | Mot de passe du compte Mercator | `motdepasse` |
-| `SYNC_DRY_RUN` | `false` | Si `true`, simule sans écrire dans Mercator | `true` |
-| `LOG_LEVEL` | `info` | Niveau de verbosité des logs (`debug`, `info`, `warning`, `error`) | `debug` |
+| Variable | Défaut | Description                                                                                                                                                               | Exemple                                                |
+|---|---|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------|
+| `GLPI_URL` | — | URL de base de l'instance GLPI (sans slash final)                                                                                                                         | `http://127.0.0.1:8080` ou `https://glpi.domain.local` |
+| `GLPI_APP_TOKEN` | — | Token applicatif GLPI (Configuration → General → API → Clients de l'API → GLPI)                                                                                            | `abc123…`                                              |
+| `GLPI_USER_TOKEN` | — | Token utilisateur GLPI (Administration → Users → GLPI → Jeton d'API)                                                                                                      | `xyz789…`                                              |
+| `GLPI_ENTITY_ID` | _(vide)_ | ID de l'entité GLPI à synchroniser ; vide = toutes les entités                                                                                                            | `3`                                                    |
+| `GLPI_ALLOWED_STATES` | _(vide)_ | Noms ou IDs de statuts autorisés, séparés par virgules ; vide = tous                                                                                                      | `En production,En stock`                               |
+| `GLPI_ALLOWED_STATES_COMPUTERS` | _(vide)_ | Surcharge du filtre statut pour les `Computer`                                                                                                                            | `En production`                                        |
+| `GLPI_ALLOWED_STATES_PHONES` | _(vide)_ | Surcharge du filtre statut pour les `Phone`                                                                                                                               | `En production`                                        |
+| `GLPI_ALLOWED_STATES_PERIPHERALS` | _(vide)_ | Surcharge du filtre statut pour les `Peripheral`                                                                                                                          | —                                                      |
+| `GLPI_ALLOWED_STATES_SOFTWARE` | _(vide)_ | Surcharge du filtre statut pour les `Software`                                                                                                                            | —                                                      |
+| `GLPI_ALLOWED_STATES_NETWORK_EQUIPMENT` | _(vide)_ | Surcharge du filtre statut pour les `NetworkEquipment`                                                                                                                    | —                                                      |
+| `GLPI_ALLOWED_STATES_RACKS` | _(vide)_ | Surcharge du filtre statut pour les `Rack`                                                                                                                                | —                                                      |
+| `GLPI_COMPUTER_TYPES_WORKSTATIONS` | _(vide)_ | Noms ou IDs de `computertypes` routés vers `workstations` ; vide = tous                                                                                                   | `Poste de travail,Laptop`                              |
+| `GLPI_COMPUTER_TYPES_LOGICAL_SERVERS` | _(vide)_ | Noms ou IDs de `computertypes` routés vers `logical-servers` ; vide = désactivé                                                                                           | `Machine virtuelle`                                    |
+| `GLPI_COMPUTER_TYPES_PHYSICAL_SERVERS` | _(vide)_ | Noms ou IDs de `computertypes` routés vers `physical-servers` ; vide = désactivé                                                                                          | `Serveur physique`                                     |
+| `GLPI_NETWORK_DEVICE_TYPES_SWITCHES` | _(vide)_ | Noms ou IDs de `networkequipmenttypes` routés vers `physical-switches` ; vide = **tous** les `NetworkEquipment` non repris par les filtres ci-dessous (comportement historique) | `Switch`                                               |
+| `GLPI_NETWORK_DEVICE_TYPES_ROUTERS` | _(vide)_ | Noms ou IDs de `networkequipmenttypes` routés vers `physical-routers` ; vide = désactivé                                                                                  | `Routeur`                                              |
+| `GLPI_NETWORK_DEVICE_TYPES_WIFI_TERMINALS` | _(vide)_ | Noms ou IDs de `networkequipmenttypes` routés vers `wifi-terminals` ; vide = désactivé                                                                                    | `Borne Wifi`                                           |
+| `GLPI_NETWORK_DEVICE_TYPES_PHYSICAL_SECURITY_DEVICES` | _(vide)_ | Noms ou IDs de `networkequipmenttypes` routés vers `physical-security-devices` ; vide = désactivé                                                                         | `Caméra IP`                                            |
+| `GLPI_NETWORK_DEVICE_TYPES_STORAGE_DEVICES` | _(vide)_ | Noms ou IDs de `networkequipmenttypes` routés vers `storage-devices` ; vide = désactivé                                                                                   | `Baie de stockage`                                     |
+| `MERCATOR_URL` | — | URL de base de l'instance Mercator (sans slash final)                                                                                                                     | `https://mercator.acme.fr`                             |
+| `MERCATOR_LOGIN` | — | Email du compte Mercator utilisé pour l'API                                                                                                                               | `sync@acme.fr`                                         |
+| `MERCATOR_PASSWORD` | — | Mot de passe du compte Mercator                                                                                                                                           | `motdepasse`                                           |
+| `SYNC_DRY_RUN` | `false` | Si `true`, simule sans écrire dans Mercator                                                                                                                               | `true`                                                 |
+| `LOG_LEVEL` | `info` | Niveau de verbosité des logs (`debug`, `info`, `warning`, `error`)                                                                                                        | `debug`                                                |
 
 ### Configuration côté GLPI
 
