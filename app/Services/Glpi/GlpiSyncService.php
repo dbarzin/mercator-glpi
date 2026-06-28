@@ -594,16 +594,19 @@ class GlpiSyncService
     {
         $map = [];
 
-        foreach ($glpi->getItems('Item_Rack', ['range' => '0-999']) as $itemRack) {
+        // expand_dropdowns=0 est indispensable ici : avec la valeur par défaut (1),
+        // l'API GLPI renvoie items_id et racks_id sous forme de NOM au lieu d'ID,
+        // ce qui brise les clés "{itemtype}_{id}" attendues par resolveBayId().
+        foreach ($glpi->getItems('Item_Rack', ['range' => '0-999', 'expand_dropdowns' => 0]) as $itemRack) {
             $itemType = $itemRack['itemtype'] ?? null;
-            $itemsId = $itemRack['items_id'] ?? null;
-            $racksId = $itemRack['racks_id'] ?? null;
+            $rawItemsId = $itemRack['items_id'] ?? null;
+            $rawRacksId = $itemRack['racks_id'] ?? null;
 
-            if ($itemType === null || $itemsId === null || $racksId === null) {
+            if ($itemType === null || $rawItemsId === null || $rawRacksId === null) {
                 continue;
             }
 
-            $map[$itemType.'_'.$itemsId] = $racksId;
+            $map[$itemType.'_'.(int) $rawItemsId] = (int) $rawRacksId;
         }
 
         return $map;

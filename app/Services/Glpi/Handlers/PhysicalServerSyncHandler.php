@@ -2,12 +2,13 @@
 
 namespace App\Services\Glpi\Handlers;
 
+use App\Services\Glpi\Contracts\SupportsBayResolution;
 use App\Services\Glpi\Contracts\SupportsGlpiItemDetail;
 use App\Services\Glpi\Contracts\SyncHandler;
 use App\Services\Glpi\Handlers\Concerns\MatchesGlpiDropdownType;
 use App\Services\Glpi\Mappers\PhysicalServerMapper;
 
-class PhysicalServerSyncHandler implements SyncHandler, SupportsGlpiItemDetail
+class PhysicalServerSyncHandler implements SyncHandler, SupportsGlpiItemDetail, SupportsBayResolution
 {
     use MatchesGlpiDropdownType;
 
