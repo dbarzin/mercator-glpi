@@ -5,6 +5,7 @@ namespace App\Services\Glpi;
 use App\Services\Glpi\Contracts\GlpiClientInterface;
 use App\Services\Glpi\Contracts\SupportsBayResolution;
 use App\Services\Glpi\Contracts\SupportsGlpiItemDetail;
+use App\Services\Glpi\Contracts\SupportsGlpiOperatingSystem;
 use App\Services\Glpi\Contracts\SyncHandler;
 use App\Services\Mercator\Contracts\MercatorClientInterface;
 use Illuminate\Support\Facades\Log;
@@ -98,6 +99,25 @@ class GlpiSyncService
             unset($item);
 
             Log::debug("[{$endpoint}] Enrichissement détaillé : ".count($glpiItems).' item(s)');
+        }
+
+        // ── 3c. Enrichissement système d'exploitation (Item_OperatingSystem) ───
+        // operatingsystems_id n'est pas un champ natif de Computer depuis GLPI 10
+        // (relation glpi_items_operatingsystems) : sous-endpoint dédié, item par item.
+
+        if ($handler instanceof SupportsGlpiOperatingSystem) {
+            foreach ($glpiItems as &$item) {
+                $osItems = $glpi->getSubItems(
+                    $handler->glpiItemType(),
+                    $item['id'],
+                    'Item_OperatingSystem',
+                    ['expand_dropdowns' => 1]
+                );
+                $item['_os'] = $osItems[0] ?? null;
+            }
+            unset($item);
+
+            Log::debug("[{$endpoint}] Enrichissement OS : ".count($glpiItems).' item(s)');
         }
 
         // ── 4. Chargement Mercator ────────────────────────────────────────────

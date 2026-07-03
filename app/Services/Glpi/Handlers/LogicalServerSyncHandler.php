@@ -3,11 +3,12 @@
 namespace App\Services\Glpi\Handlers;
 
 use App\Services\Glpi\Contracts\SupportsGlpiItemDetail;
+use App\Services\Glpi\Contracts\SupportsGlpiOperatingSystem;
 use App\Services\Glpi\Contracts\SyncHandler;
 use App\Services\Glpi\Handlers\Concerns\MatchesGlpiDropdownType;
 use App\Services\Glpi\Mappers\LogicalServerMapper;
 
-class LogicalServerSyncHandler implements SyncHandler, SupportsGlpiItemDetail
+class LogicalServerSyncHandler implements SupportsGlpiItemDetail, SupportsGlpiOperatingSystem, SyncHandler
 {
     use MatchesGlpiDropdownType;
 
@@ -26,7 +27,7 @@ class LogicalServerSyncHandler implements SyncHandler, SupportsGlpiItemDetail
     public function glpiQueryParams(): array
     {
         return [
-            'range'            => '0-999',
+            'range' => '0-999',
             'expand_dropdowns' => 1,
         ];
     }
@@ -39,11 +40,11 @@ class LogicalServerSyncHandler implements SyncHandler, SupportsGlpiItemDetail
     public function glpiDetailParams(): array
     {
         return [
-            'expand_dropdowns'  => 1,
+            'expand_dropdowns' => 1,
             'with_networkports' => 1,
-            'with_devices'      => 1,
-            'with_disks'        => 1,
-            'with_infocoms'     => 1,
+            'with_devices' => 1,
+            'with_disks' => 1,
+            'with_infocoms' => 1,
         ];
     }
 

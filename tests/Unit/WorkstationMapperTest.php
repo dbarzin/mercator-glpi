@@ -62,7 +62,13 @@ it('mappe le fabricant et le modèle', function () {
 it('mappe le système d\'exploitation', function () {
     $result = (new WorkstationMapper)->map(glpiComputer(), ['buildings_map' => []]);
 
-    expect($result['operating_system'])->toBe('Windows 11 Pro');
+    expect($result['operating_system'])->toBe('Windows 11 Pro — 23H2');
+});
+
+it('ne mappe pas de système d\'exploitation si absent (_os null)', function () {
+    $result = (new WorkstationMapper)->map(glpiComputer(['_os' => null]), ['buildings_map' => []]);
+
+    expect($result)->not->toHaveKey('operating_system');
 });
 
 it('mappe le statut', function () {

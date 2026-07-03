@@ -32,7 +32,7 @@ class WorkstationMapper
             'manufacturer' => $this->nullable($item['manufacturers_id'] ?? null),
             'model' => $this->nullable($item['computermodels_id'] ?? null),
             'serial_number' => $this->nullable($item['serial'] ?? null),
-            'operating_system' => $this->nullable($item['operatingsystems_id'] ?? null),
+            'operating_system' => $this->extractOperatingSystem($item),
             'status' => $this->nullable($item['states_id'] ?? null),
             'other_user' => $this->nullable($item['users_id'] ?? null),
             'building_id' => $building['id'] ?? null,
@@ -141,6 +141,34 @@ class WorkstationMapper
 
         yield from $ports['NetworkPortEthernet'] ?? [];
         yield from $ports['NetworkPortWifi'] ?? [];
+    }
+
+    // -------------------------------------------------------------------------
+    // Système d'exploitation (Item_OperatingSystem, cf. GlpiSyncService::sync())
+    // -------------------------------------------------------------------------
+
+    private function extractOperatingSystem(array $item): ?string
+    {
+        $os = $item['_os'] ?? null;
+
+        if (empty($os)) {
+            return null;
+        }
+
+        $name = $this->nullable($os['operatingsystems_id'] ?? null);
+
+        if ($name === null) {
+            return null;
+        }
+
+        $parts = [$name];
+
+        $version = $this->nullable($os['operatingsystemversions_id'] ?? null);
+        if ($version !== null) {
+            $parts[] = $version;
+        }
+
+        return implode(' — ', $parts);
     }
 
     // -------------------------------------------------------------------------

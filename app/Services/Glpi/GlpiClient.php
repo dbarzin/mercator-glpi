@@ -11,7 +11,8 @@ use RuntimeException;
 class GlpiClient implements GlpiClientInterface
 {
     private ?string $sessionToken = null;
-    private ?int    $entityId;
+
+    private ?int $entityId;
 
     public function __construct(private readonly array $config)
     {
@@ -38,19 +39,19 @@ class GlpiClient implements GlpiClientInterface
     public function authenticate(): void
     {
         $url = $this->url('initSession');
-        Log::debug('[GLPI] GET ' . $url);
+        Log::debug('[GLPI] GET '.$url);
 
         $response = Http::withHeaders([
-            'Authorization' => 'user_token ' . $this->config['user_token'],
-            'App-Token'     => $this->config['app_token'],
+            'Authorization' => 'user_token '.$this->config['user_token'],
+            'App-Token' => $this->config['app_token'],
         ])->get($url);
 
-        Log::debug('[GLPI] initSession → HTTP ' . $response->status());
+        Log::debug('[GLPI] initSession → HTTP '.$response->status());
 
         if ($response->failed()) {
-            Log::debug('[GLPI] Erreur initSession : ' . $response->body());
+            Log::debug('[GLPI] Erreur initSession : '.$response->body());
             throw new RuntimeException(
-                'Authentification GLPI échouée : ' . $response->status()
+                'Authentification GLPI échouée : '.$response->status()
             );
         }
 
@@ -70,16 +71,16 @@ class GlpiClient implements GlpiClientInterface
         Log::debug('[GLPI] POST changeActiveEntities', ['entities_id' => $entityId, 'is_recursive' => true]);
 
         $response = $this->request()->post($url, [
-            'entities_id'  => $entityId,
+            'entities_id' => $entityId,
             'is_recursive' => true,
         ]);
 
-        Log::debug('[GLPI] changeActiveEntities → HTTP ' . $response->status());
+        Log::debug('[GLPI] changeActiveEntities → HTTP '.$response->status());
 
         if ($response->failed()) {
-            Log::debug('[GLPI] Erreur changeActiveEntities : ' . $response->body());
+            Log::debug('[GLPI] Erreur changeActiveEntities : '.$response->body());
             throw new RuntimeException(
-                'Changement d\'entité active GLPI échoué : ' . $response->status()
+                'Changement d\'entité active GLPI échoué : '.$response->status()
             );
         }
     }
@@ -111,9 +112,33 @@ class GlpiClient implements GlpiClientInterface
         Log::debug("[GLPI] {$itemType}/{$id} → HTTP {$response->status()}");
 
         if ($response->failed()) {
-            Log::debug("[GLPI] Erreur {$itemType}/{$id} : " . $response->body());
+            Log::debug("[GLPI] Erreur {$itemType}/{$id} : ".$response->body());
             throw new RuntimeException(
-                "Erreur lors de la récupération de {$itemType}/{$id} : " . $response->status()
+                "Erreur lors de la récupération de {$itemType}/{$id} : ".$response->status()
+            );
+        }
+
+        return $response->json() ?? [];
+    }
+
+    /**
+     * Récupère les sous-items liés à un item (ex: Computer/{id}/Item_OperatingSystem).
+     * Certaines relations GLPI (OS, licences…) ne sont exposées que via ce
+     * sous-endpoint, pas via un paramètre with_* sur getItem().
+     */
+    public function getSubItems(string $itemType, int $id, string $subItemType, array $params = []): array
+    {
+        $url = $this->url("{$itemType}/{$id}/{$subItemType}");
+        Log::debug("[GLPI] GET {$itemType}/{$id}/{$subItemType}", ['params' => $params]);
+
+        $response = $this->request()->get($url, $params);
+
+        Log::debug("[GLPI] {$itemType}/{$id}/{$subItemType} → HTTP {$response->status()}");
+
+        if ($response->failed()) {
+            Log::debug("[GLPI] Erreur {$itemType}/{$id}/{$subItemType} : ".$response->body());
+            throw new RuntimeException(
+                "Erreur lors de la récupération de {$itemType}/{$id}/{$subItemType} : ".$response->status()
             );
         }
 
@@ -126,7 +151,7 @@ class GlpiClient implements GlpiClientInterface
     public function getItems(string $itemType, array $extraParams = []): array
     {
         $params = array_merge([
-            'range'            => '0-999',
+            'range' => '0-999',
             'expand_dropdowns' => 1,
         ], $extraParams);
 
@@ -140,14 +165,14 @@ class GlpiClient implements GlpiClientInterface
         Log::debug("[GLPI] {$itemType} → HTTP {$response->status()}");
 
         if ($response->failed() && $response->status() !== 206) {
-            Log::debug("[GLPI] Erreur {$itemType} : " . $response->body());
+            Log::debug("[GLPI] Erreur {$itemType} : ".$response->body());
             throw new RuntimeException(
-                "Erreur lors de la récupération de {$itemType} : " . $response->status()
+                "Erreur lors de la récupération de {$itemType} : ".$response->status()
             );
         }
 
         $items = $response->json() ?? [];
-        Log::debug("[GLPI] {$itemType} → {$response->status()}, " . count($items) . ' item(s) reçu(s)');
+        Log::debug("[GLPI] {$itemType} → {$response->status()}, ".count($items).' item(s) reçu(s)');
 
         return $items;
     }
@@ -159,7 +184,7 @@ class GlpiClient implements GlpiClientInterface
     private function withEntityParams(array $params): array
     {
         if ($this->entityId !== null) {
-            $params['entities_id']  = $this->entityId;
+            $params['entities_id'] = $this->entityId;
             $params['is_recursive'] = 1;
         }
 
@@ -174,13 +199,13 @@ class GlpiClient implements GlpiClientInterface
 
         return Http::withHeaders([
             'Session-Token' => $this->sessionToken,
-            'App-Token'     => $this->config['app_token'],
-            'Content-Type'  => 'application/json',
+            'App-Token' => $this->config['app_token'],
+            'Content-Type' => 'application/json',
         ]);
     }
 
     private function url(string $endpoint): string
     {
-        return rtrim($this->config['url'], '/') . '/apirest.php/' . $endpoint;
+        return rtrim($this->config['url'], '/').'/apirest.php/'.$endpoint;
     }
 }

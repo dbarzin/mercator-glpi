@@ -24,6 +24,7 @@ function glpiMock(array $items = []): MockInterface
     $mock = Mockery::mock(GlpiClientInterface::class);
     $mock->shouldReceive('getItems')->andReturn($items);
     $mock->shouldReceive('getItem')->andReturn([]);
+    $mock->shouldReceive('getSubItems')->andReturn([]);
 
     return $mock;
 }
@@ -106,6 +107,7 @@ it('enrichit chaque item via getItem() et fusionne le détail avant le mapping',
         ->once()
         ->with('Computer', $items[0]['id'], makeHandler()->glpiDetailParams())
         ->andReturn(['ram' => 8192]);
+    $glpi->shouldReceive('getSubItems')->andReturn([]);
 
     $created = [];
     $mercator = mercatorMock([], mercatorBuildingsFixture());
@@ -224,6 +226,15 @@ it('met à jour un workstation existant dans Mercator', function () {
 
 it('met à jour le système d\'exploitation', function () {
     $updated = [];
+    $items = glpiComputersFixture();
+
+    $glpi = Mockery::mock(GlpiClientInterface::class);
+    $glpi->shouldReceive('getItems')->andReturn($items);
+    $glpi->shouldReceive('getItem')->andReturn([]);
+    $glpi->shouldReceive('getSubItems')
+        ->with('Computer', 42, 'Item_OperatingSystem', ['expand_dropdowns' => 1])
+        ->andReturn([['operatingsystems_id' => 'Windows 11 Pro']]);
+    $glpi->shouldReceive('getSubItems')->andReturn([]);
 
     $mercator = mercatorMock(mercatorWorkstationsFixture(), mercatorBuildingsFixture());
     $mercator->shouldReceive('update')
@@ -235,13 +246,9 @@ it('met à jour le système d\'exploitation', function () {
     $mercator->shouldReceive('delete')->andReturn(null);
     $mercator->shouldReceive('create')->andReturn(['id' => 99]);
 
-    (new GlpiSyncService)->sync(
-        glpiMock(glpiComputersFixture()),
-        $mercator,
-        makeHandler(),
-    );
+    (new GlpiSyncService)->sync($glpi, $mercator, makeHandler());
 
-    // La fixture GLPI a "Windows 11 Pro", Mercator avait "Windows 10 Pro"
+    // GLPI (Item_OperatingSystem) a "Windows 11 Pro", Mercator avait "Windows 10 Pro"
     $update = collect($updated)->first(fn ($u) => $u['id'] === 10);
     expect($update['payload']['operating_system'])->toBe('Windows 11 Pro');
 });

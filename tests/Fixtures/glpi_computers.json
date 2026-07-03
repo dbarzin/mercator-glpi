@@ -9,11 +9,14 @@
     "computertypes_id": "Poste de travail",
     "manufacturers_id": "Dell",
     "computermodels_id": "Latitude 5520",
-    "operatingsystems_id": "Windows 11 Pro",
     "states_id": "En production",
     "users_id": "didier.barzin",
     "ram": 16384,
     "date_last_boot": "2024-06-01",
+    "_os": {
+      "operatingsystems_id": "Windows 11 Pro",
+      "operatingsystemversions_id": "23H2"
+    },
     "_networkports": {
       "NetworkPortEthernet": [
         {
@@ -64,11 +67,11 @@
     "computertypes_id": "Laptop",
     "manufacturers_id": "Lenovo",
     "computermodels_id": "ThinkPad X1",
-    "operatingsystems_id": "Ubuntu 24.04",
     "states_id": "En production",
     "users_id": 0,
     "ram": 8192,
     "date_last_boot": "2024-06-10",
+    "_os": null,
     "_networkports": {},
     "_devices": {},
     "_disks": [],
