@@ -21,25 +21,37 @@
           "name": "eth0",
           "mac": "00:11:22:33:44:55",
           "NetworkName": {
-            "IPAddress": [{"name": "192.168.1.100"}]
+            "IPAddress": [
+              {
+                "name": "192.168.1.100"
+              }
+            ]
           }
         }
       ]
     },
     "_devices": {
-      "DeviceProcessor": [
-        {"designation": "Intel Core i7-1165G7", "frequency": 2800, "nbcores": 4}
+      "Item_DeviceProcessor": [
+        {
+          "deviceprocessors_id": "Intel Core i7-1165G7",
+          "frequency": 2800,
+          "nbcores": 4
+        }
       ]
     },
     "_disks": [
-      {"name": "C:", "totalsize": 512000, "freesize": 256000}
+      {
+        "name": "C:",
+        "totalsize": 512000,
+        "freesize": 256000
+      }
     ],
     "_infocoms": {
       "buy_date": "2022-03-15",
       "order_date": "2022-03-01",
       "warranty_expiration": "2025-03-15",
       "warranty_duration": 36,
-      "value": 1299.00
+      "value": 1299.0
     }
   },
   {

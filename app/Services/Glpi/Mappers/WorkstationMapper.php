@@ -149,14 +149,14 @@ class WorkstationMapper
 
     private function extractCpu(array $item): ?string
     {
-        $processors = $item['_devices']['DeviceProcessor'] ?? [];
+        $processors = $item['_devices']['Item_DeviceProcessor'] ?? [];
 
         if (empty($processors)) {
             return null;
         }
 
-        $first = $processors[0];
-        $designation = $first['designation'] ?? '';
+        $first = reset($processors);
+        $designation = $first['deviceprocessors_id'] ?? '';
 
         if (! $designation) {
             return null;
