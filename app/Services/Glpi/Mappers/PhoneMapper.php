@@ -21,7 +21,7 @@ class PhoneMapper
         $sitesMap     = $context['sites_map'] ?? [];
         $building     = $this->resolveBuilding($item['locations_id'] ?? null, $buildingsMap, $sitesMap);
 
-        return array_filter([
+        $payload = array_filter([
             'name'        => $item['name'],
             'description' => $this->buildDescription($item, [
                 'phonetypes_id', 'manufacturers_id', 'phonemodels_id', 'locations_id',
@@ -29,10 +29,14 @@ class PhoneMapper
             'type'        => $this->nullable($item['phonetypes_id'] ?? null),
             'vendor'      => $this->nullable($item['manufacturers_id'] ?? null),
             'product'     => $this->nullable($item['phonemodels_id'] ?? null),
-            'building_id' => $building['id'] ?? null,
-            'site_id'     => $building['site_id'] ?? null,
             'address_ip'  => $this->extractIp($item),
         ], fn($v) => $v !== null);
+
+        // building_id/site_id toujours inclus (même null), cf. WorkstationMapper::map().
+        $payload['building_id'] = $building['id'] ?? null;
+        $payload['site_id'] = $building['site_id'] ?? null;
+
+        return $payload;
     }
 
     // -------------------------------------------------------------------------

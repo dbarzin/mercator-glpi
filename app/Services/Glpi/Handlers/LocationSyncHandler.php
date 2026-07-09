@@ -29,7 +29,9 @@ class LocationSyncHandler implements SyncHandler
 
     public function processOrphans(): bool
     {
-        return false;
+        // Un Building supprimé côté GLPI doit être supprimé (ou marqué [OLD] s'il n'a
+        // pas été créé par ce connecteur) côté Mercator (cf. issue #13).
+        return true;
     }
 
     /**

@@ -48,11 +48,17 @@ class LocationMapper
             }
         }
 
-        return array_filter([
+        $payload = array_filter([
             'name' => $item['name'],
             'description' => $this->buildDescription($item, ['locations_id']),
-            'building_id' => $buildingId,
-            'site_id' => $siteId,
         ], fn ($v) => $v !== null);
+
+        // building_id/site_id sont toujours inclus, même null : sinon array_filter les
+        // retire du payload et un changement de parent (ou un parent devenu inconnu)
+        // n'est jamais répercuté côté Mercator lors d'une mise à jour.
+        $payload['building_id'] = $buildingId;
+        $payload['site_id'] = $siteId;
+
+        return $payload;
     }
 }

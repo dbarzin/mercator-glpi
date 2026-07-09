@@ -134,8 +134,10 @@ it('retourne null si le nom de salle ne correspond à aucun building', function 
         ['buildings_map' => buildingsMap()]
     );
 
-    expect($result)->not->toHaveKey('building_id');
-    expect($result)->not->toHaveKey('site_id');
+    // Toujours présents (même null) pour qu'une mise à jour efface bien l'ancienne
+    // valeur côté Mercator si la nouvelle salle ne résout à rien (cf. issue #13).
+    expect($result['building_id'])->toBeNull();
+    expect($result['site_id'])->toBeNull();
 });
 
 it('retourne null si locations_id est 0 (non renseigné)', function () {
@@ -144,8 +146,8 @@ it('retourne null si locations_id est 0 (non renseigné)', function () {
         ['buildings_map' => buildingsMap()]
     );
 
-    expect($result)->not->toHaveKey('building_id');
-    expect($result)->not->toHaveKey('site_id');
+    expect($result['building_id'])->toBeNull();
+    expect($result['site_id'])->toBeNull();
 });
 
 it('résout le building_id insensiblement à la casse', function () {
@@ -176,7 +178,7 @@ it('résout le site_id quand la localisation est un site et non un building', fu
     );
 
     expect($result['site_id'])->toBe(3);
-    expect($result)->not->toHaveKey('building_id');
+    expect($result['building_id'])->toBeNull();
 });
 
 it('privilégie le building au site quand les deux correspondent au même nom', function () {

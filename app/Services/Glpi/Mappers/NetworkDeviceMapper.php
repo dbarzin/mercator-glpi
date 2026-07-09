@@ -25,7 +25,7 @@ class NetworkDeviceMapper
         $sitesMap     = $context['sites_map'] ?? [];
         $building     = $this->resolveBuilding($item['locations_id'] ?? null, $buildingsMap, $sitesMap);
 
-        return array_filter([
+        $payload = array_filter([
             'name'        => $item['name'],
             'description' => $this->buildDescription($item, [
                 'networkequipmenttypes_id', 'manufacturers_id', 'networkequipmentmodels_id', 'locations_id',
@@ -33,10 +33,14 @@ class NetworkDeviceMapper
             'type'        => $this->mapType($item['networkequipmenttypes_id'] ?? null),
             'vendor'      => $this->nullable($item['manufacturers_id'] ?? null),
             'product'     => $this->nullable($item['networkequipmentmodels_id'] ?? null),
-            'building_id' => $building['id'] ?? null,
-            'site_id'     => $building['site_id'] ?? null,
             'bay_id'      => $this->resolveBayId('NetworkEquipment', $item['id'], $context),
         ], fn($v) => $v !== null);
+
+        // building_id/site_id toujours inclus (même null), cf. WorkstationMapper::map().
+        $payload['building_id'] = $building['id'] ?? null;
+        $payload['site_id'] = $building['site_id'] ?? null;
+
+        return $payload;
     }
 
     /**

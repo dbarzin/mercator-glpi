@@ -22,7 +22,7 @@ class WorkstationMapper
         $sitesMap = $context['sites_map'] ?? [];
         $building = $this->resolveBuilding($item['locations_id'] ?? null, $buildingsMap, $sitesMap);
 
-        return array_filter([
+        $payload = array_filter([
             'name' => $item['name'],
             'description' => $this->buildDescription($item, [
                 'computertypes_id', 'manufacturers_id', 'computermodels_id', 'serial',
@@ -35,8 +35,6 @@ class WorkstationMapper
             'operating_system' => $this->extractOperatingSystem($item),
             'status' => $this->nullable($item['states_id'] ?? null),
             'other_user' => $this->nullable($item['users_id'] ?? null),
-            'building_id' => $building['id'] ?? null,
-            'site_id' => $building['site_id'] ?? null,
             'address_ip' => $this->extractIp($item),
             'mac_address' => $this->extractMac($item),
             'network_port_type' => $this->extractPortType($item),
@@ -53,6 +51,14 @@ class WorkstationMapper
                 : null,
             'update_source' => 'GLPI',
         ], fn ($v) => $v !== null);
+
+        // building_id/site_id sont toujours inclus, même null : sinon array_filter les
+        // retire du payload et une mise à jour (déplacement, ou salle non résolue) ne
+        // les efface jamais côté Mercator (cf. issue #13 — le poste ne "bouge" pas).
+        $payload['building_id'] = $building['id'] ?? null;
+        $payload['site_id'] = $building['site_id'] ?? null;
+
+        return $payload;
     }
 
     // -------------------------------------------------------------------------

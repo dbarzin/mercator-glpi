@@ -101,17 +101,17 @@ it('résout le site_id quand la localisation est un site et non un building', fu
     );
 
     expect($result['site_id'])->toBe(3);
-    expect($result)->not->toHaveKey('building_id');
+    expect($result['building_id'])->toBeNull();
 });
 
-it('laisse building_id et site_id absents si la salle est inconnue', function () {
+it('laisse building_id et site_id à null si la salle est inconnue', function () {
     $result = (new PeripheralMapper)->map(
         glpiPeripheral(['locations_id' => 'Salle Inconnue']),
         ['buildings_map' => peripheralBuildingsMap()]
     );
 
-    expect($result)->not->toHaveKey('building_id');
-    expect($result)->not->toHaveKey('site_id');
+    expect($result['building_id'])->toBeNull();
+    expect($result['site_id'])->toBeNull();
 });
 
 it('résout la localisation insensiblement à la casse', function () {

@@ -21,7 +21,7 @@ class PeripheralMapper
         $sitesMap     = $context['sites_map'] ?? [];
         $building     = $this->resolveBuilding($item['locations_id'] ?? null, $buildingsMap, $sitesMap);
 
-        return array_filter([
+        $payload = array_filter([
             'name'        => $item['name'],
             'description' => $this->buildDescription($item, [
                 'peripheraltypes_id', 'manufacturers_id', 'peripheralmodels_id', 'users_id_tech', 'locations_id',
@@ -30,10 +30,14 @@ class PeripheralMapper
             'vendor'      => $this->nullable($item['manufacturers_id'] ?? null),
             'product'     => $this->nullable($item['peripheralmodels_id'] ?? null),
             'responsible' => $this->nullable($item['users_id_tech'] ?? null),
-            'building_id' => $building['id'] ?? null,
-            'site_id'     => $building['site_id'] ?? null,
             'address_ip'  => $this->extractIp($item),
         ], fn($v) => $v !== null);
+
+        // building_id/site_id toujours inclus (même null), cf. WorkstationMapper::map().
+        $payload['building_id'] = $building['id'] ?? null;
+        $payload['site_id'] = $building['site_id'] ?? null;
+
+        return $payload;
     }
 
     // -------------------------------------------------------------------------

@@ -371,7 +371,7 @@ it('laisse building_id absent si la salle ne correspond à aucun building', func
         makeHandler(),
     );
 
-    expect($created[0])->not->toHaveKey('building_id');
+    expect($created[0]['building_id'])->toBeNull();
 });
 
 // ── Comportement orphelins ────────────────────────────────────────────────────

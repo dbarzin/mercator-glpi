@@ -23,12 +23,16 @@ class RackMapper
         $sitesMap     = $context['sites_map'] ?? [];
         $building     = $this->resolveBuilding($item['locations_id'] ?? null, $buildingsMap, $sitesMap);
 
-        return array_filter([
+        $payload = array_filter([
             'name'        => $item['name'],
             'description' => $this->buildDescription($item, ['locations_id']),
-            'building_id' => $building['id'] ?? null,
-            'site_id'     => $building['site_id'] ?? null,
         ], fn($v) => $v !== null);
+
+        // building_id/site_id toujours inclus (même null), cf. WorkstationMapper::map().
+        $payload['building_id'] = $building['id'] ?? null;
+        $payload['site_id'] = $building['site_id'] ?? null;
+
+        return $payload;
     }
 
     /**
