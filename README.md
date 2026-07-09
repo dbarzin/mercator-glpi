@@ -844,7 +844,7 @@ class MonitorSyncHandler implements SyncHandler
     public function glpiItemType(): string        { return 'Monitor'; }
     public function mercatorEndpoint(): string    { return 'monitors'; }
     public function glpiQueryParams(): array      { return ['range' => '0-999', 'expand_dropdowns' => 1]; }
-    public function processOrphans(): bool        { return false; }
+    public function processOrphans(): bool        { return true; }
     public function filterItem(array $item): bool { return true; }
     public function map(array $glpiItem, array $context): array { return $this->mapper->map($glpiItem, $context); }
 }

@@ -12,10 +12,11 @@
     {
       "id": 11,
       "name": "PC-ANCIEN-GLPI",
-      "description": "[glpi_id:99] Ancien poste supprimé de GLPI",
+      "description": "Ancien poste supprimé de GLPI",
       "serial_number": "SN000000",
       "building_id": 5,
-      "update_source": "GLPI"
+      "update_source": "GLPI",
+      "ext_refs": "{GLPI}99"
     },
     {
       "id": 12,

@@ -29,7 +29,8 @@ class SiteSyncHandler implements SyncHandler
 
     public function processOrphans(): bool
     {
-        return false;
+        // Supprime (ou marque [OLD]) les items Mercator absents de GLPI, cf. issue #13.
+        return true;
     }
 
     /**
