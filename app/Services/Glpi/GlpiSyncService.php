@@ -18,7 +18,7 @@ class GlpiSyncService
      * Le filtrage par statut est ignoré pour ces types, quelle que soit
      * la config GLPI_ALLOWED_STATES / GLPI_ALLOWED_STATES_<TYPE>.
      */
-    private const STATELESS_ITEM_TYPES = ['Location'];
+    private const STATELESS_ITEM_TYPES = ['Location', 'Domain'];
 
     /**
      * Synchronise un type d'item GLPI vers Mercator.

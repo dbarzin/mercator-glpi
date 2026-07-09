@@ -9,6 +9,7 @@ use App\Services\Glpi\Handlers\ApplicationSyncHandler;
 use App\Services\Glpi\Handlers\ApplianceSyncHandler;
 use App\Services\Glpi\Handlers\CertificateSyncHandler;
 use App\Services\Glpi\Handlers\ClusterSyncHandler;
+use App\Services\Glpi\Handlers\DomainSyncHandler;
 use App\Services\Glpi\Handlers\LocationSyncHandler;
 use App\Services\Glpi\Handlers\LogicalServerSyncHandler;
 use App\Services\Glpi\Handlers\NetworkDeviceSyncHandler;
@@ -26,6 +27,7 @@ use App\Services\Glpi\Mappers\ApplicationMapper;
 use App\Services\Glpi\Mappers\ApplianceMapper;
 use App\Services\Glpi\Mappers\CertificateMapper;
 use App\Services\Glpi\Mappers\ClusterMapper;
+use App\Services\Glpi\Mappers\DomainMapper;
 use App\Services\Glpi\Mappers\LocationMapper;
 use App\Services\Glpi\Mappers\LogicalServerMapper;
 use App\Services\Glpi\Mappers\NetworkDeviceMapper;
@@ -75,6 +77,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(SiteMapper::class);
         $this->app->singleton(CertificateMapper::class);
         $this->app->singleton(ClusterMapper::class);
+        $this->app->singleton(DomainMapper::class);
 
         $this->app->singleton(LogicalServerMapper::class, fn($app) =>
             new LogicalServerMapper($app->make(WorkstationMapper::class))
@@ -153,6 +156,10 @@ class AppServiceProvider extends ServiceProvider
 
         $this->app->singleton(CertificateSyncHandler::class, fn($app) =>
             new CertificateSyncHandler($app->make(CertificateMapper::class))
+        );
+
+        $this->app->singleton(DomainSyncHandler::class, fn($app) =>
+            new DomainSyncHandler($app->make(DomainMapper::class))
         );
 
         $this->app->singleton(GlpiSyncService::class);
