@@ -53,4 +53,7 @@ return [
         'storage_devices'           => $parseIds(env('GLPI_NETWORK_DEVICE_TYPES_STORAGE_DEVICES')),
     ],
 
+    // Filtrage des Domain par type (domaintypes_id) — IDs ou noms GLPI, vide = tous types acceptés
+    'domain_types' => $parseIds(env('GLPI_DOMAIN_TYPES')),
+
 ];

@@ -170,6 +170,7 @@ Copiez `.env.sample` vers `.env` et renseignez les valeurs :
 | `GLPI_NETWORK_DEVICE_TYPES_WIFI_TERMINALS` | _(vide)_ | Noms ou IDs de `networkequipmenttypes` routés vers `wifi-terminals` ; vide = désactivé                                                                                    | `Borne Wifi`                                           |
 | `GLPI_NETWORK_DEVICE_TYPES_PHYSICAL_SECURITY_DEVICES` | _(vide)_ | Noms ou IDs de `networkequipmenttypes` routés vers `physical-security-devices` ; vide = désactivé                                                                         | `Caméra IP`                                            |
 | `GLPI_NETWORK_DEVICE_TYPES_STORAGE_DEVICES` | _(vide)_ | Noms ou IDs de `networkequipmenttypes` routés vers `storage-devices` ; vide = désactivé                                                                                   | `Baie de stockage`                                     |
+| `GLPI_DOMAIN_TYPES` | _(vide)_ | Noms ou IDs de `domaintypes` autorisés pour les `Domain` ; vide = tous                                                                                                    | `Interne,Externe`                                      |
 | `MERCATOR_URL` | — | URL de base de l'instance Mercator (sans slash final)                                                                                                                     | `https://mercator.acme.fr`                             |
 | `MERCATOR_LOGIN` | — | Email du compte Mercator utilisé pour l'API                                                                                                                               | `sync@acme.fr`                                         |
 | `MERCATOR_PASSWORD` | — | Mot de passe du compte Mercator                                                                                                                                           | `motdepasse`                                           |
@@ -612,6 +613,17 @@ GLPI_NETWORK_DEVICE_TYPES_STORAGE_DEVICES=Baie de stockage
 ```
 
 > **Important** : `GLPI_NETWORK_DEVICE_TYPES_SWITCHES` vide = tous les `NetworkEquipment` non capturés par les autres filtres vont dans `physical-switches` (comportement historique, rétrocompatible). `GLPI_NETWORK_DEVICE_TYPES_ROUTERS`, `_WIFI_TERMINALS`, `_PHYSICAL_SECURITY_DEVICES` et `_STORAGE_DEVICES` vides = **désactivé** (opt-in explicite requis) — aucun `NetworkEquipment` n'est routé vers ces endpoints.
+
+### Par type (Domain)
+
+```ini
+# Ne synchroniser que les domaines internes
+GLPI_DOMAIN_TYPES=Interne
+```
+
+Vide = tous les `Domain` sont acceptés, quel que soit leur `domaintypes_id`.
+
+> **Note sur `--entity`/`GLPI_ENTITY_ID` et `Domain`** : l'API GLPI ne restreint pas toujours les `Domain` retournés à l'entité active de la session, contrairement aux autres itemtypes. Le connecteur applique donc un filtrage explicite côté client pour ce type (comparaison de l'entité de chaque domaine avec l'entité configurée, y compris ses sous-entités) — aucune configuration supplémentaire n'est nécessaire, `--entity`/`GLPI_ENTITY_ID` suffit.
 
 ---
 

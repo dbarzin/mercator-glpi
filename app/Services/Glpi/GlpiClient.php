@@ -32,6 +32,11 @@ class GlpiClient implements GlpiClientInterface
         }
     }
 
+    public function getEntityId(): ?int
+    {
+        return $this->entityId;
+    }
+
     // -------------------------------------------------------------------------
     // Session
     // -------------------------------------------------------------------------

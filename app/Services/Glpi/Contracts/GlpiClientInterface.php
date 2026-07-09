@@ -15,4 +15,6 @@ interface GlpiClientInterface
     public function getSubItems(string $itemType, int $id, string $subItemType, array $params = []): array;
 
     public function setEntityId(?int $entityId): void;
+
+    public function getEntityId(): ?int;
 }

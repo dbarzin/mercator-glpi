@@ -2,11 +2,15 @@
 
 namespace App\Services\Glpi\Handlers;
 
+use App\Services\Glpi\Contracts\SupportsExplicitEntityFilter;
 use App\Services\Glpi\Contracts\SyncHandler;
+use App\Services\Glpi\Handlers\Concerns\MatchesGlpiDropdownType;
 use App\Services\Glpi\Mappers\DomainMapper;
 
-class DomainSyncHandler implements SyncHandler
+class DomainSyncHandler implements SupportsExplicitEntityFilter, SyncHandler
 {
+    use MatchesGlpiDropdownType;
+
     public function __construct(private readonly DomainMapper $mapper) {}
 
     public function glpiItemType(): string
@@ -36,7 +40,14 @@ class DomainSyncHandler implements SyncHandler
 
     public function filterItem(array $item): bool
     {
-        return true;
+        $allowed = config('glpi.domain_types', []);
+
+        // Vide = tous les Domain sont acceptés (comportement historique)
+        if (empty($allowed)) {
+            return true;
+        }
+
+        return $this->matchesType($item['domaintypes_id'] ?? null, $allowed);
     }
 
     public function map(array $glpiItem, array $context): array

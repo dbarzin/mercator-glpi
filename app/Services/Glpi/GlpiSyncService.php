@@ -4,6 +4,7 @@ namespace App\Services\Glpi;
 
 use App\Services\Glpi\Contracts\GlpiClientInterface;
 use App\Services\Glpi\Contracts\SupportsBayResolution;
+use App\Services\Glpi\Contracts\SupportsExplicitEntityFilter;
 use App\Services\Glpi\Contracts\SupportsGlpiItemDetail;
 use App\Services\Glpi\Contracts\SupportsGlpiOperatingSystem;
 use App\Services\Glpi\Contracts\SyncHandler;
@@ -64,6 +65,30 @@ class GlpiSyncService
             ));
             $filtered = $before - count($glpiItems);
             Log::debug("[{$endpoint}] Filtre statut [{$handler->glpiItemType()}] : {$filtered} item(s) exclus, ".count($glpiItems).' conservé(s)');
+        }
+
+        // ── 2b. Filtrage explicite par entité ─────────────────────────────────
+        // GLPI restreint normalement les items retournés à l'entité active de la
+        // session (changeActiveEntities, cf. GlpiClient::authenticate()). Certains
+        // itemtypes (Domain) ignorent cette restriction côté serveur : on retente
+        // alors un filtrage explicite ici, par comparaison de chemin (completename).
+
+        if ($handler instanceof SupportsExplicitEntityFilter) {
+            $entityId = $glpi->getEntityId();
+
+            if ($entityId !== null) {
+                $entityPath = $this->resolveEntityPath($glpi, $entityId);
+
+                if ($entityPath !== null) {
+                    $before = count($glpiItems);
+                    $glpiItems = array_values(array_filter(
+                        $glpiItems,
+                        fn ($item) => $this->matchesEntity($item['entities_id'] ?? null, $entityPath)
+                    ));
+                    $filtered = $before - count($glpiItems);
+                    Log::debug("[{$endpoint}] Filtre entité [{$handler->glpiItemType()}] : {$filtered} item(s) exclus, ".count($glpiItems).' conservé(s)');
+                }
+            }
         }
 
         // ── 3. Filtrage par sous-type (handler::filterItem) ───────────────────
@@ -545,6 +570,43 @@ class GlpiSyncService
         }
 
         return in_array($stateValue, $allowedStates, true);
+    }
+
+    // -------------------------------------------------------------------------
+    // Helpers — filtrage explicite par entité (cf. SupportsExplicitEntityFilter)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Résout le chemin complet (completename, ex. "Entité racine > Filiale") de
+     * l'entité configurée, pour comparaison avec le entities_id (expand_dropdowns=1,
+     * donc déjà expansé en chemin) des items GLPI. Retourne null si non résolu
+     * (ex. entité supprimée) : le filtrage est alors ignoré, pas plus permissif ni
+     * restrictif que le comportement actuel.
+     */
+    private function resolveEntityPath(GlpiClientInterface $glpi, int $entityId): ?string
+    {
+        $entity = $glpi->getItem('Entity', $entityId);
+
+        $path = $entity['completename'] ?? $entity['name'] ?? null;
+
+        return $path !== null ? (string) $path : null;
+    }
+
+    /**
+     * Vérifie que le entities_id (chemin complet) d'un item GLPI est l'entité
+     * configurée elle-même ou une de ses entités filles (sémantique "is_recursive",
+     * cf. GlpiClient::changeActiveEntities).
+     */
+    private function matchesEntity(mixed $itemEntityPath, string $entityPath): bool
+    {
+        if ($itemEntityPath === null || $itemEntityPath === '') {
+            return false;
+        }
+
+        $itemEntityPath = html_entity_decode((string) $itemEntityPath, ENT_QUOTES | ENT_HTML5);
+
+        return $itemEntityPath === $entityPath
+            || str_starts_with($itemEntityPath, $entityPath.' > ');
     }
 
     // -------------------------------------------------------------------------
