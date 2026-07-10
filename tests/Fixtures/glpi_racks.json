@@ -1,0 +1,10 @@
+[
+  {
+    "id": 5,
+    "name": "RACK-A01",
+    "comment": "Baie principale datacenter",
+    "locations_id": "Salle 101",
+    "racktypes_id": "Baie 42U",
+    "states_id": "En production"
+  }
+]

@@ -1,0 +1,14 @@
+[
+  {
+    "id": 3,
+    "name": "Siège Social",
+    "comment": "Bâtiment principal",
+    "locations_id": 0,
+    "address": "1 rue de la Paix",
+    "postcode": "75001",
+    "town": "Paris",
+    "country": "France",
+    "latitude": "48.8698",
+    "longitude": "2.3309"
+  }
+]

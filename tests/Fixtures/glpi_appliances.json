@@ -1,0 +1,13 @@
+[
+  {
+    "id": 7,
+    "name": "ERP-PRODUCTION",
+    "comment": "Application ERP principal",
+    "locations_id": "Salle 101",
+    "appliancetypes_id": "Application métier",
+    "users_id_tech": "admin.applicatif",
+    "_items": {
+      "Computer": [{"id": 42, "name": "PC-DIDIER-01"}]
+    }
+  }
+]

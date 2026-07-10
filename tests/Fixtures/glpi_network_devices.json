@@ -1,0 +1,26 @@
+[
+  {
+    "id": 10,
+    "name": "SW-CORE-01",
+    "comment": "Switch cœur de réseau",
+    "serial": "FCW2123L08H",
+    "locations_id": "Salle 101",
+    "networkequipmenttypes_id": "Switch",
+    "manufacturers_id": "Cisco",
+    "networkequipmentmodels_id": "Catalyst 2960",
+    "states_id": "En production",
+    "users_id_tech": "admin.reseau",
+    "_networkports": {
+      "NetworkPortEthernet": [
+        {
+          "id": 5,
+          "name": "Gi0/0",
+          "mac": "AA:BB:CC:DD:EE:FF",
+          "NetworkName": {
+            "IPAddress": [{"name": "10.0.0.1"}]
+          }
+        }
+      ]
+    }
+  }
+]

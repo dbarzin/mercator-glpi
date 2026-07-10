@@ -1,0 +1,13 @@
+[
+  {
+    "id": 7,
+    "name": "example.com",
+    "comment": "Domaine principal de l'entreprise",
+    "domaintypes_id": "Interne",
+    "date_expiration": "2027-01-15 00:00:00",
+    "date_domaincreation": "2015-01-15 00:00:00",
+    "entities_id": "Entité racine",
+    "is_recursive": true,
+    "is_active": true
+  }
+]
