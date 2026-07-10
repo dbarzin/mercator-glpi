@@ -79,14 +79,26 @@ class GlpiSyncService
             if ($entityId !== null) {
                 $entityPath = $this->resolveEntityPath($glpi, $entityId);
 
+                Log::debug("[{$endpoint}] Filtre entité [{$handler->glpiItemType()}] : entité configurée #{$entityId} → chemin résolu : ".($entityPath ?? '(non résolu)'));
+
                 if ($entityPath !== null) {
                     $before = count($glpiItems);
+                    $excludedNames = [];
                     $glpiItems = array_values(array_filter(
                         $glpiItems,
-                        fn ($item) => $this->matchesEntity($item['entities_id'] ?? null, $entityPath)
+                        function ($item) use ($entityPath, &$excludedNames) {
+                            $keep = $this->matchesEntity($item['entities_id'] ?? null, $entityPath);
+                            if (! $keep) {
+                                $excludedNames[] = ($item['name'] ?? '?').' (entities_id='.($item['entities_id'] ?? '?').')';
+                            }
+
+                            return $keep;
+                        }
                     ));
                     $filtered = $before - count($glpiItems);
-                    Log::debug("[{$endpoint}] Filtre entité [{$handler->glpiItemType()}] : {$filtered} item(s) exclus, ".count($glpiItems).' conservé(s)');
+                    Log::debug("[{$endpoint}] Filtre entité [{$handler->glpiItemType()}] : {$filtered} item(s) exclus, ".count($glpiItems).' conservé(s)'.($excludedNames !== [] ? ' — exclus : '.implode(', ', $excludedNames) : ''));
+                } else {
+                    Log::warning("[{$endpoint}] Filtre entité [{$handler->glpiItemType()}] : entité #{$entityId} non résolue (getItem Entity vide) — filtrage explicite ignoré, tous les items sont conservés");
                 }
             }
         }
