@@ -2,10 +2,11 @@
 
 namespace App\Services\Glpi\Handlers;
 
+use App\Services\Glpi\Contracts\SupportsExplicitEntityFilter;
 use App\Services\Glpi\Contracts\SyncHandler;
 use App\Services\Glpi\Mappers\SiteMapper;
 
-class SiteSyncHandler implements SyncHandler
+class SiteSyncHandler implements SupportsExplicitEntityFilter, SyncHandler
 {
     public function __construct(private readonly SiteMapper $mapper) {}
 
@@ -22,7 +23,7 @@ class SiteSyncHandler implements SyncHandler
     public function glpiQueryParams(): array
     {
         return [
-            'range'            => '0-999',
+            'range' => '0-999',
             'expand_dropdowns' => 1,
         ];
     }

@@ -10,6 +10,7 @@ it('s\'authentifie sur GLPI et Mercator', function () {
     $this->mock(GlpiClientInterface::class, function ($mock) {
         $mock->shouldReceive('authenticate')->once();
         $mock->shouldReceive('getItems')->andReturn([]);
+        $mock->shouldReceive('getEntityId')->andReturn(null);
         $mock->shouldReceive('killSession')->once();
     });
 
@@ -27,6 +28,7 @@ it('ferme la session GLPI après la sync', function () {
     $this->mock(GlpiClientInterface::class, function ($mock) {
         $mock->shouldReceive('authenticate');
         $mock->shouldReceive('getItems')->andReturn([]);
+        $mock->shouldReceive('getEntityId')->andReturn(null);
         $mock->shouldReceive('killSession')->once();
     });
 
@@ -43,7 +45,8 @@ it('ferme la session GLPI après la sync', function () {
 it('retourne un code d\'erreur si l\'authentification GLPI échoue', function () {
     $this->mock(GlpiClientInterface::class, function ($mock) {
         $mock->shouldReceive('authenticate')
-            ->andThrow(new \RuntimeException('Connexion refusée'));
+            ->andThrow(new RuntimeException('Connexion refusée'));
+        $mock->shouldReceive('getEntityId')->zeroOrMoreTimes()->andReturn(null);
         $mock->shouldReceive('killSession')->zeroOrMoreTimes();
     });
 
@@ -61,6 +64,7 @@ it('accepte l\'option --dry-run sans écrire', function () {
     $this->mock(GlpiClientInterface::class, function ($mock) {
         $mock->shouldReceive('authenticate');
         $mock->shouldReceive('getItems')->andReturn([]);
+        $mock->shouldReceive('getEntityId')->andReturn(null);
         $mock->shouldReceive('killSession');
     });
 

@@ -156,6 +156,7 @@ it('ne charge pas Item_Rack pour un handler qui ne résout pas de bay (Location)
     $glpi->shouldReceive('getItems')->with('Location', Mockery::any())->andReturn([]);
     $glpi->shouldNotReceive('getItems')->with('Item_Rack', Mockery::any());
     $glpi->shouldReceive('getItem')->andReturn([]);
+    $glpi->shouldReceive('getEntityId')->andReturn(null);
 
     $mercator = Mockery::mock(MercatorClientInterface::class);
     $mercator->shouldReceive('getBuildings')->andReturn([]);

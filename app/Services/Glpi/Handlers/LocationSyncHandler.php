@@ -2,10 +2,11 @@
 
 namespace App\Services\Glpi\Handlers;
 
+use App\Services\Glpi\Contracts\SupportsExplicitEntityFilter;
 use App\Services\Glpi\Contracts\SyncHandler;
 use App\Services\Glpi\Mappers\LocationMapper;
 
-class LocationSyncHandler implements SyncHandler
+class LocationSyncHandler implements SupportsExplicitEntityFilter, SyncHandler
 {
     public function __construct(private readonly LocationMapper $mapper) {}
 

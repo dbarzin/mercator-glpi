@@ -25,6 +25,7 @@ function glpiMockLocations(array $items): MockInterface
     $mock = Mockery::mock(GlpiClientInterface::class);
     $mock->shouldReceive('getItems')->andReturn($items);
     $mock->shouldReceive('getItem')->andReturn([]);
+    $mock->shouldReceive('getEntityId')->andReturn(null);
 
     return $mock;
 }
