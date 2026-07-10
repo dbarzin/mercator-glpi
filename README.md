@@ -171,6 +171,7 @@ Copiez `.env.sample` vers `.env` et renseignez les valeurs :
 | `GLPI_NETWORK_DEVICE_TYPES_PHYSICAL_SECURITY_DEVICES` | _(vide)_ | Noms ou IDs de `networkequipmenttypes` routés vers `physical-security-devices` ; vide = désactivé                                                                         | `Caméra IP`                                            |
 | `GLPI_NETWORK_DEVICE_TYPES_STORAGE_DEVICES` | _(vide)_ | Noms ou IDs de `networkequipmenttypes` routés vers `storage-devices` ; vide = désactivé                                                                                   | `Baie de stockage`                                     |
 | `GLPI_DOMAIN_TYPES` | _(vide)_ | Noms ou IDs de `domaintypes` autorisés pour les `Domain` ; vide = tous                                                                                                    | `Interne,Externe`                                      |
+| `GLPI_SOFTWARE_CATEGORIES` | _(vide)_ | Noms ou IDs de `softwarecategories` autorisés pour les `Software` ; vide = toutes                                                                                        | `Bureautique,Navigateur`                               |
 | `MERCATOR_URL` | — | URL de base de l'instance Mercator (sans slash final)                                                                                                                     | `https://mercator.acme.fr`                             |
 | `MERCATOR_LOGIN` | — | Email du compte Mercator utilisé pour l'API                                                                                                                               | `sync@acme.fr`                                         |
 | `MERCATOR_PASSWORD` | — | Mot de passe du compte Mercator                                                                                                                                           | `motdepasse`                                           |
@@ -370,6 +371,8 @@ php application glpi:sync --type=logical_servers --type=physical_servers
 | `date` | `install_date` |
 
 > Le catalogue applicatif doit exister avant de synchroniser `links` et `activity_links`. **Synchroniser `applications` avant ces deux types.**
+>
+> `GLPI_SOFTWARE_CATEGORIES` filtre les `Software` par `softwarecategories_id` (noms ou IDs, séparés par virgules) ; vide = toutes catégories acceptées.
 
 #### Activités (`Appliance` → `activities`)
 
@@ -920,6 +923,7 @@ Les tests utilisent **Mockery** — aucun appel réseau réel. Les fixtures JSON
 | `GlpiStatusFilterTest` | Filtrage par statut (`GLPI_ALLOWED_STATES*`) |
 | `ComputerTypeFilterTest` | Filtrage par sous-type Computer (`GLPI_COMPUTER_TYPES_*`) |
 | `NetworkDeviceTypeFilterTest` | Filtrage par sous-type NetworkEquipment (`GLPI_NETWORK_DEVICE_TYPES_*`) |
+| `SoftwareCategoryFilterTest` | Filtrage par catégorie Software (`GLPI_SOFTWARE_CATEGORIES`) |
 | `SiteSyncHandlerTest` | Filtre `filterItem()` du `SiteSyncHandler` (Location racine uniquement) |
 | `GlpiSyncCommandTest` (`tests/Feature/`) | Intégration commande CLI |
 

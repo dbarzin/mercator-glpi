@@ -56,4 +56,7 @@ return [
     // Filtrage des Domain par type (domaintypes_id) — IDs ou noms GLPI, vide = tous types acceptés
     'domain_types' => $parseIds(env('GLPI_DOMAIN_TYPES')),
 
+    // Filtrage des Software par catégorie (softwarecategories_id) — IDs ou noms GLPI, vide = toutes catégories acceptées
+    'software_categories' => $parseIds(env('GLPI_SOFTWARE_CATEGORIES')),
+
 ];

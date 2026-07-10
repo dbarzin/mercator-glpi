@@ -3,10 +3,13 @@
 namespace App\Services\Glpi\Handlers;
 
 use App\Services\Glpi\Contracts\SyncHandler;
+use App\Services\Glpi\Handlers\Concerns\MatchesGlpiDropdownType;
 use App\Services\Glpi\Mappers\ApplicationMapper;
 
 class ApplicationSyncHandler implements SyncHandler
 {
+    use MatchesGlpiDropdownType;
+
     public function __construct(private readonly ApplicationMapper $mapper) {}
 
     public function glpiItemType(): string
@@ -35,7 +38,14 @@ class ApplicationSyncHandler implements SyncHandler
 
     public function filterItem(array $item): bool
     {
-        return true;
+        $allowed = config('glpi.software_categories', []);
+
+        // Vide = tous les Software sont acceptés (comportement historique)
+        if (empty($allowed)) {
+            return true;
+        }
+
+        return $this->matchesType($item['softwarecategories_id'] ?? null, $allowed);
     }
 
     public function map(array $glpiItem, array $context): array
