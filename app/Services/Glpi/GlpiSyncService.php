@@ -18,8 +18,10 @@ class GlpiSyncService
      * Itemtypes GLPI ne possédant pas d'attribut "statut" (states_id).
      * Le filtrage par statut est ignoré pour ces types, quelle que soit
      * la config GLPI_ALLOWED_STATES / GLPI_ALLOWED_STATES_<TYPE>.
+     * Software : le statut n'existe qu'au niveau SoftwareVersion, non synchronisé
+     * (cf. issue #12).
      */
-    private const STATELESS_ITEM_TYPES = ['Location', 'Domain'];
+    private const STATELESS_ITEM_TYPES = ['Location', 'Domain', 'Software'];
 
     /**
      * Synchronise un type d'item GLPI vers Mercator.
@@ -53,9 +55,17 @@ class GlpiSyncService
 
         // ── 2. Filtrage par statut (Évolution 2) ──────────────────────────────
 
-        $allowedStates = in_array($handler->glpiItemType(), self::STATELESS_ITEM_TYPES, true)
-            ? []
-            : $this->resolveAllowedStates($handler->glpiItemType());
+        $itemType = $handler->glpiItemType();
+        $isStateless = in_array($itemType, self::STATELESS_ITEM_TYPES, true);
+
+        if ($isStateless && ! empty($this->resolveAllowedStates($itemType))) {
+            $detail = $itemType === 'Software'
+                ? ' (le statut existe au niveau SoftwareVersion, non synchronisé)'
+                : '';
+            Log::warning("[{$endpoint}] Filtre statut [{$itemType}] : configuration ignorée — {$itemType} ne possède pas d'attribut states_id dans GLPI{$detail}");
+        }
+
+        $allowedStates = $isStateless ? [] : $this->resolveAllowedStates($itemType);
 
         if (! empty($allowedStates)) {
             $before = count($glpiItems);

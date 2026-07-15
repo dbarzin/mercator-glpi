@@ -2,13 +2,16 @@
 
 use App\Services\Glpi\Contracts\GlpiClientInterface;
 use App\Services\Glpi\GlpiSyncService;
+use App\Services\Glpi\Handlers\ApplicationSyncHandler;
 use App\Services\Glpi\Handlers\DomainSyncHandler;
 use App\Services\Glpi\Handlers\LocationSyncHandler;
 use App\Services\Glpi\Handlers\WorkstationSyncHandler;
+use App\Services\Glpi\Mappers\ApplicationMapper;
 use App\Services\Glpi\Mappers\DomainMapper;
 use App\Services\Glpi\Mappers\LocationMapper;
 use App\Services\Glpi\Mappers\WorkstationMapper;
 use App\Services\Mercator\Contracts\MercatorClientInterface;
+use Illuminate\Support\Facades\Log;
 use Mockery\MockInterface;
 
 // ── Tests filtrage par statut (Évolution 2) ───────────────────────────────────
@@ -242,4 +245,73 @@ it('ignore le filtre statut pour Domain (pas d\'attribut states_id dans GLPI)', 
 
     expect($created)->toContain('example.com');
     expect($created)->toContain('example.org');
+});
+
+it('ignore le filtre statut pour Software (pas d\'attribut states_id dans GLPI)', function () {
+    config(['glpi.allowed_states' => ['default' => ['2']]]);
+    config(['glpi.software_categories' => []]);
+
+    $created = [];
+    $mercator = makeFilterMercatorBase();
+    $mercator->shouldReceive('create')
+        ->andReturnUsing(function (string $ep, array $payload) use (&$created) {
+            $created[] = $payload['name'];
+
+            return ['id' => 1];
+        });
+
+    $items = [
+        ['id' => 1, 'name' => 'Firefox', 'comment' => '', 'manufacturers_id' => 0, 'softwarecategories_id' => 0, 'users_id_tech' => 0, 'date' => null, 'locations_id' => 0],
+        ['id' => 2, 'name' => '7-Zip', 'comment' => '', 'manufacturers_id' => 0, 'softwarecategories_id' => 0, 'users_id_tech' => 0, 'date' => null, 'locations_id' => 0],
+        ['id' => 3, 'name' => 'LibreOffice', 'comment' => '', 'manufacturers_id' => 0, 'softwarecategories_id' => 0, 'users_id_tech' => 0, 'date' => null, 'locations_id' => 0],
+    ];
+
+    $handler = new ApplicationSyncHandler(new ApplicationMapper);
+
+    (new GlpiSyncService)->sync(makeFilterGlpiMock($items), $mercator, $handler);
+
+    expect($created)->toHaveCount(3);
+    expect($created)->toContain('Firefox', '7-Zip', 'LibreOffice');
+});
+
+it('émet un avertissement quand un filtre statut est configuré pour Software', function () {
+    config(['glpi.allowed_states' => ['default' => ['2']]]);
+    config(['glpi.software_categories' => []]);
+
+    Log::spy();
+
+    $mercator = makeFilterMercatorBase();
+    $mercator->shouldReceive('create')->andReturn(['id' => 1]);
+
+    $items = [
+        ['id' => 1, 'name' => 'Firefox', 'comment' => '', 'manufacturers_id' => 0, 'softwarecategories_id' => 0, 'users_id_tech' => 0, 'date' => null, 'locations_id' => 0],
+    ];
+
+    $handler = new ApplicationSyncHandler(new ApplicationMapper);
+
+    (new GlpiSyncService)->sync(makeFilterGlpiMock($items), $mercator, $handler);
+
+    Log::shouldHaveReceived('warning')
+        ->withArgs(fn (string $message) => str_contains($message, 'Software') && str_contains($message, 'states_id'))
+        ->once();
+});
+
+it('n\'émet aucun avertissement pour Software quand aucun filtre statut n\'est configuré', function () {
+    config(['glpi.allowed_states' => ['default' => []]]);
+    config(['glpi.software_categories' => []]);
+
+    Log::spy();
+
+    $mercator = makeFilterMercatorBase();
+    $mercator->shouldReceive('create')->andReturn(['id' => 1]);
+
+    $items = [
+        ['id' => 1, 'name' => 'Firefox', 'comment' => '', 'manufacturers_id' => 0, 'softwarecategories_id' => 0, 'users_id_tech' => 0, 'date' => null, 'locations_id' => 0],
+    ];
+
+    $handler = new ApplicationSyncHandler(new ApplicationMapper);
+
+    (new GlpiSyncService)->sync(makeFilterGlpiMock($items), $mercator, $handler);
+
+    Log::shouldNotHaveReceived('warning');
 });

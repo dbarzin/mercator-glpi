@@ -159,7 +159,6 @@ Copiez `.env.sample` vers `.env` et renseignez les valeurs :
 | `GLPI_ALLOWED_STATES_COMPUTERS` | _(vide)_ | Surcharge du filtre statut pour les `Computer`                                                                                                                            | `En production`                                        |
 | `GLPI_ALLOWED_STATES_PHONES` | _(vide)_ | Surcharge du filtre statut pour les `Phone`                                                                                                                               | `En production`                                        |
 | `GLPI_ALLOWED_STATES_PERIPHERALS` | _(vide)_ | Surcharge du filtre statut pour les `Peripheral`                                                                                                                          | —                                                      |
-| `GLPI_ALLOWED_STATES_SOFTWARE` | _(vide)_ | Surcharge du filtre statut pour les `Software`                                                                                                                            | —                                                      |
 | `GLPI_ALLOWED_STATES_NETWORK_EQUIPMENT` | _(vide)_ | Surcharge du filtre statut pour les `NetworkEquipment`                                                                                                                    | —                                                      |
 | `GLPI_ALLOWED_STATES_RACKS` | _(vide)_ | Surcharge du filtre statut pour les `Rack`                                                                                                                                | —                                                      |
 | `GLPI_COMPUTER_TYPES_WORKSTATIONS` | _(vide)_ | Noms ou IDs de `computertypes` routés vers `workstations` ; vide = tous                                                                                                   | `Poste de travail,Laptop`                              |
@@ -558,6 +557,8 @@ GLPI_ALLOWED_STATES_PHONES=
 ```
 
 **Priorité** : la config spécifique au type (`GLPI_ALLOWED_STATES_COMPUTERS`) est prioritaire sur la config globale (`GLPI_ALLOWED_STATES`). Si les deux sont vides, aucun filtrage n'est appliqué (tous les statuts sont acceptés).
+
+> **Itemtypes sans statut** : `Location`, `Domain` et `Software` ne possèdent pas d'attribut `states_id` dans GLPI (pour les `Software`, le statut existe au niveau `SoftwareVersion`, non synchronisé). Le filtre statut est donc ignoré pour ces types — un avertissement est journalisé si `GLPI_ALLOWED_STATES` (ou une variante spécifique) est configuré alors qu'il ne peut pas s'appliquer. Pour filtrer les `Software`, utilisez `GLPI_SOFTWARE_CATEGORIES` (filtrage par `softwarecategories_id`, noms ou IDs).
 
 ### Par sous-type (Computer)
 
