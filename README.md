@@ -372,6 +372,8 @@ php application glpi:sync --type=logical_servers --type=physical_servers
 > Le catalogue applicatif doit exister avant de synchroniser `links` et `activity_links`. **Synchroniser `applications` avant ces deux types.**
 >
 > `GLPI_SOFTWARE_CATEGORIES` filtre les `Software` par `softwarecategories_id` (noms ou IDs, séparés par virgules) ; vide = toutes catégories acceptées.
+>
+> **Attention** : un logiciel importé automatiquement par un agent d'inventaire GLPI n'a en général **aucune catégorie assignée** (`softwarecategories_id` vide/0) — assigner une catégorie est une action manuelle dans GLPI. Si vous configurez `GLPI_SOFTWARE_CATEGORIES` alors qu'aucun logiciel n'a de catégorie renseignée côté GLPI, **tous les `Software` seront exclus** (`Filtre sous-type : N item(s) exclus, 0 conservé(s)` dans les logs). En `LOG_LEVEL=debug`, chaque exclusion liste la valeur `softwarecategories_id` reçue pour diagnostiquer. Laissez la variable vide si vos logiciels ne sont pas catégorisés dans GLPI.
 
 #### Activités (`Appliance` → `activities`)
 

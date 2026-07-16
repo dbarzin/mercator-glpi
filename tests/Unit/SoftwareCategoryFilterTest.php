@@ -2,6 +2,7 @@
 
 use App\Services\Glpi\Handlers\ApplicationSyncHandler;
 use App\Services\Glpi\Mappers\ApplicationMapper;
+use Illuminate\Support\Facades\Log;
 
 // ── Tests filtrage par catégorie de logiciel (GLPI_SOFTWARE_CATEGORIES) ──────
 
@@ -59,4 +60,17 @@ it('rejette les logiciels sans catégorie si un filtre est configuré', function
 
     expect($handler->filterItem(softwareWithCategory(null)))->toBeFalse();
     expect($handler->filterItem(softwareWithCategory(0)))->toBeFalse();
+});
+
+it('journalise en debug la valeur softwarecategories_id des logiciels exclus', function () {
+    config(['glpi.software_categories' => ['Navigateur']]);
+
+    Log::spy();
+
+    $handler = makeApplicationHandler();
+    $handler->filterItem(softwareWithCategory(0));
+
+    Log::shouldHaveReceived('debug')
+        ->withArgs(fn (string $message) => str_contains($message, 'Filtre catégorie') && str_contains($message, 'softwarecategories_id'))
+        ->once();
 });
