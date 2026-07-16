@@ -151,7 +151,13 @@ class GlpiClient implements GlpiClientInterface
     }
 
     /**
-     * Récupère les items d'un itemtype donné (Phone, Peripheral, Computer…)
+     * Récupère les items d'un itemtype donné (Phone, Peripheral, Computer…).
+     *
+     * L'API GLPI plafonne chaque réponse à la taille de "range" (1000 par défaut
+     * ici). Au-delà, elle renvoie un statut 206 et un header Content-Range
+     * "start-end/total" : on boucle sur les pages suivantes jusqu'à récupérer
+     * "total" items, pour ne pas tronquer silencieusement les collections de
+     * plus de 1000 éléments (cf. issue #12 follow-up).
      */
     public function getItems(string $itemType, array $extraParams = []): array
     {
@@ -162,22 +168,46 @@ class GlpiClient implements GlpiClientInterface
 
         $params = $this->withEntityParams($params);
 
+        $pageSize = $this->rangeSize($params['range']) ?? 1000;
         $url = $this->url($itemType);
-        Log::debug("[GLPI] GET {$itemType}", ['url' => $url, 'params' => $params]);
 
-        $response = $this->request()->get($url, $params);
+        $items = [];
+        $start = 0;
 
-        Log::debug("[GLPI] {$itemType} → HTTP {$response->status()}");
+        while (true) {
+            $params['range'] = $start.'-'.($start + $pageSize - 1);
+            Log::debug("[GLPI] GET {$itemType}", ['url' => $url, 'params' => $params]);
 
-        if ($response->failed() && $response->status() !== 206) {
-            Log::debug("[GLPI] Erreur {$itemType} : ".$response->body());
-            throw new RuntimeException(
-                "Erreur lors de la récupération de {$itemType} : ".$response->status()
-            );
+            $response = $this->request()->get($url, $params);
+
+            Log::debug("[GLPI] {$itemType} → HTTP {$response->status()}");
+
+            if ($response->failed() && $response->status() !== 206) {
+                Log::debug("[GLPI] Erreur {$itemType} : ".$response->body());
+                throw new RuntimeException(
+                    "Erreur lors de la récupération de {$itemType} : ".$response->status()
+                );
+            }
+
+            $page = $response->json() ?? [];
+            $items = array_merge($items, $page);
+
+            $range = $this->parseContentRange($response->header('Content-Range'));
+
+            // Pas de Content-Range exploitable : le serveur a renvoyé la collection
+            // complète en une seule page, rien à paginer davantage.
+            if ($range === null || $page === []) {
+                break;
+            }
+
+            $start = $range['end'] + 1;
+
+            if ($start >= $range['total']) {
+                break;
+            }
         }
 
-        $items = $response->json() ?? [];
-        Log::debug("[GLPI] {$itemType} → {$response->status()}, ".count($items).' item(s) reçu(s)');
+        Log::debug("[GLPI] {$itemType} → ".count($items).' item(s) reçu(s) au total');
 
         return $items;
     }
@@ -185,6 +215,30 @@ class GlpiClient implements GlpiClientInterface
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
+
+    /**
+     * Extrait la taille d'une plage "start-end" (ex: "0-999" → 1000).
+     */
+    private function rangeSize(string $range): ?int
+    {
+        if (! preg_match('/^(\d+)-(\d+)$/', $range, $m)) {
+            return null;
+        }
+
+        return (int) $m[2] - (int) $m[1] + 1;
+    }
+
+    /**
+     * Parse le header "Content-Range: start-end/total" renvoyé par GLPI.
+     */
+    private function parseContentRange(?string $header): ?array
+    {
+        if ($header === null || ! preg_match('#^(\d+)-(\d+)/(\d+)$#', trim($header), $m)) {
+            return null;
+        }
+
+        return ['end' => (int) $m[2], 'total' => (int) $m[3]];
+    }
 
     private function withEntityParams(array $params): array
     {

@@ -89,6 +89,8 @@ MercatorClient               — Client HTTP Mercator (API REST, Bearer token)
 
 **Champs non mappés** : les champs GLPI qui n'ont pas de champ Mercator dédié (ex. numéro de série alternatif, statut, type de baie…) sont automatiquement sérialisés à la suite de la description au format `"nom_champ" : "valeur"`. Les champs vides, nuls ou à 0 sont ignorés. Les structures complexes (`_networkports`, `_devices`…) sont également ignorées.
 
+**Pagination** : chaque `SyncHandler::glpiQueryParams()` demande une première page de 1000 items (`range=0-999`), mais `GlpiClient::getItems()` boucle automatiquement sur les pages suivantes en s'appuyant sur le header `Content-Range` renvoyé par GLPI (`start-end/total`) jusqu'à récupérer la collection complète. Aucune collection GLPI (Software, Computer…) n'est donc tronquée au-delà de 1000 items ; il n'y a pas de réglage à activer, c'est automatique.
+
 ---
 
 ## Prérequis
@@ -923,6 +925,7 @@ Les tests utilisent **Mockery** — aucun appel réseau réel. Les fixtures JSON
 | `GlpiSyncServiceLocationHierarchyTest` | Résolution `building_id`/`site_id` à travers la hiérarchie Location → Site |
 | `GlpiActivityLinksTest` | Liens activité ↔ application (`syncActivityLinks`) |
 | `GlpiEntityFilterTest` | Filtrage par entité GLPI (`--entity`, `GLPI_ENTITY_ID`) |
+| `GlpiClientPaginationTest` | Pagination automatique de `GlpiClient::getItems()` au-delà de 1000 items (`Content-Range`) |
 | `GlpiStatusFilterTest` | Filtrage par statut (`GLPI_ALLOWED_STATES*`) |
 | `ComputerTypeFilterTest` | Filtrage par sous-type Computer (`GLPI_COMPUTER_TYPES_*`) |
 | `NetworkDeviceTypeFilterTest` | Filtrage par sous-type NetworkEquipment (`GLPI_NETWORK_DEVICE_TYPES_*`) |
