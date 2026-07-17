@@ -4,6 +4,7 @@ namespace App\Services\Glpi;
 
 use App\Services\Glpi\Contracts\GlpiClientInterface;
 use App\Services\Glpi\Contracts\SupportsBayResolution;
+use App\Services\Glpi\Contracts\SupportsCustomExtRefsTag;
 use App\Services\Glpi\Contracts\SupportsExplicitEntityFilter;
 use App\Services\Glpi\Contracts\SupportsGlpiItemDetail;
 use App\Services\Glpi\Contracts\SupportsGlpiOperatingSystem;
@@ -40,6 +41,12 @@ class GlpiSyncService
     ): array {
         $stats = ['created' => 0, 'updated' => 0, 'deleted' => 0, 'marked_old' => 0, 'errors' => 0, 'endpoint_missing' => false];
         $endpoint = $handler->mercatorEndpoint();
+
+        // Tag ext_refs de ce handler ({GLPI} par défaut). Distinct pour les handlers dont
+        // l'endpoint cible est configurable et peut donc entrer en collision avec un autre
+        // handler sur le même endpoint (ex. Appliance/Software → applications, cf.
+        // SupportsCustomExtRefsTag, issue #12).
+        $extRefsTag = $handler instanceof SupportsCustomExtRefsTag ? $handler->extRefsTag() : '{GLPI}';
 
         // ── 1. Chargement des données ─────────────────────────────────────────
 
@@ -197,7 +204,7 @@ class GlpiSyncService
                 'ext_refs' => $item['ext_refs'] ?? null,
             ];
 
-            $glpiId = $this->extractGlpiId($entry['ext_refs']);
+            $glpiId = $this->extractGlpiId($entry['ext_refs'], $extRefsTag);
             if ($glpiId !== null) {
                 $mercByGlpiId[(string) $glpiId] = $entry;
             }
@@ -228,7 +235,7 @@ class GlpiSyncService
 
             try {
                 $payload = $handler->map($glpiItem, $context);
-                $payload['ext_refs'] = $this->buildExtRefs($existing['ext_refs'] ?? null, $glpiItem['id']);
+                $payload['ext_refs'] = $this->buildExtRefs($existing['ext_refs'] ?? null, $glpiItem['id'], $extRefsTag);
 
                 // Pas de troncature : ce log n'est émis qu'en LOG_LEVEL=debug (opt-in) et
                 // sert justement à inspecter des champs en fin de payload (cpu, memory, disk…).
@@ -298,7 +305,18 @@ class GlpiSyncService
                     continue;
                 }
 
-                $glpiTagId = $this->extractGlpiId($mercItem['ext_refs'] ?? null);
+                $itemExtRefs = $mercItem['ext_refs'] ?? null;
+                $glpiTagId = $this->extractGlpiId($itemExtRefs, $extRefsTag);
+
+                // Un item non réconcilié qui porte un tag {GLPI...} d'un AUTRE handler
+                // (ex. {GLPI}5 alors que la sync courante utilise {GLPI-Appliance}) n'est
+                // pas orphelin : il appartient à un autre sync, sur le même endpoint
+                // Mercator (cf. SupportsCustomExtRefsTag, issue #12). Ni suppression, ni [OLD].
+                if ($glpiTagId === null && $this->hasForeignGlpiTag($itemExtRefs, $extRefsTag)) {
+                    Log::debug("[{$endpoint}] Nettoyage ignoré (tag ext_refs d'un autre handler) : {$mercItem['name']}");
+
+                    continue;
+                }
 
                 try {
                     if ($glpiTagId !== null) {
@@ -750,37 +768,67 @@ class GlpiSyncService
     }
 
     /**
-     * Extrait l'identifiant GLPI depuis le champ ext_refs Mercator (tag {GLPI}N).
+     * Extrait l'identifiant GLPI depuis le champ ext_refs Mercator, pour un tag donné
+     * (ex. "{GLPI}" ou "{GLPI-Appliance}", cf. SupportsCustomExtRefsTag, issue #12).
      */
-    private function extractGlpiId(?string $extRefs): ?int
+    private function extractGlpiId(?string $extRefs, string $tag = '{GLPI}'): ?int
     {
         if (! $extRefs) {
             return null;
         }
 
-        preg_match('/\{GLPI\}(\d+)/', $extRefs, $matches);
+        preg_match('/'.preg_quote($tag, '/').'(\d+)/', $extRefs, $matches);
 
         return isset($matches[1]) ? (int) $matches[1] : null;
     }
 
     /**
-     * Construit la valeur ext_refs à envoyer à Mercator : remplace/ajoute le tag
-     * {GLPI}id tout en préservant les éventuelles références d'autres sources.
+     * Vérifie si ext_refs porte un tag {GLPI...} distinct de $tag (ex. {GLPI} alors que
+     * le handler courant utilise {GLPI-Appliance}, cf. SupportsCustomExtRefsTag, issue
+     * #12). Un tel item appartient à un autre sync handler ciblant le même endpoint
+     * Mercator : il ne doit être ni supprimé, ni marqué [OLD] par le nettoyage courant.
      */
-    private function buildExtRefs(?string $existingExtRefs, int|string $glpiId): string
+    private function hasForeignGlpiTag(?string $extRefs, string $tag): bool
+    {
+        if (! $extRefs) {
+            return false;
+        }
+
+        foreach (explode('|', $extRefs) as $ref) {
+            $ref = trim($ref);
+
+            if ($ref === '' || str_starts_with($ref, $tag)) {
+                continue;
+            }
+
+            if (preg_match('/^\{GLPI[^}]*\}\d+$/', $ref)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Construit la valeur ext_refs à envoyer à Mercator : remplace/ajoute le tag de ce
+     * handler ({GLPI}id par défaut) tout en préservant les éventuelles références
+     * d'autres sources — y compris les tags {GLPI...} d'un AUTRE handler (format
+     * différent de $tag, cf. SupportsCustomExtRefsTag, issue #12).
+     */
+    private function buildExtRefs(?string $existingExtRefs, int|string $glpiId, string $tag = '{GLPI}'): string
     {
         $refs = [];
 
         if ($existingExtRefs) {
             foreach (explode('|', $existingExtRefs) as $ref) {
                 $ref = trim($ref);
-                if ($ref !== '' && ! str_starts_with($ref, '{GLPI}')) {
+                if ($ref !== '' && ! str_starts_with($ref, $tag)) {
                     $refs[] = $ref;
                 }
             }
         }
 
-        $refs[] = '{GLPI}'.$glpiId;
+        $refs[] = $tag.$glpiId;
 
         return implode('|', $refs);
     }

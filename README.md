@@ -69,7 +69,7 @@ GlpiSyncService              — Orchestration : récupération, filtrage, créa
   │   ├── PhysicalSecurityDeviceSyncHandler → endpoint: physical-security-devices
   │   ├── StorageDeviceSyncHandler          → endpoint: storage-devices
   │   ├── RackSyncHandler                   → endpoint: bays
-  │   ├── ApplianceSyncHandler              → endpoint: activities
+  │   ├── ApplianceSyncHandler              → endpoint: activities (ou applications, cf. GLPI_APPLIANCE_MERCATOR_ENDPOINT)
   │   ├── SiteSyncHandler                   → endpoint: sites
   │   ├── LocationSyncHandler               → endpoint: buildings
   │   ├── LogicalServerSyncHandler          → endpoint: logical-servers
@@ -88,6 +88,8 @@ MercatorClient               — Client HTTP Mercator (API REST, Bearer token)
 **Traçabilité** : l'identifiant GLPI n'est jamais inscrit dans le champ `description` ; il est uniquement porté par `ext_refs`. `description` ne contient que le `comment` GLPI suivi des champs non mappés sérialisés.
 
 **Doublons de nom au sein d'un même run** : deux items GLPI distincts peuvent porter le même nom (ex. un même logiciel `Software` enregistré séparément dans plusieurs entités GLPI, cf. issue #12). Comme Mercator impose un nom unique sur certains endpoints (ex. `applications`), le premier item crée l'enregistrement Mercator et le second réconcilie dessus (`UPDATE`) au lieu de tenter une seconde création — sans quoi Mercator rejetterait la seconde création avec une erreur HTTP 422 `"name" attribute has already been taken`. Les deux items GLPI finissent donc mappés sur le même enregistrement Mercator ; seul le dernier traité dans l'ordre détermine le contenu final du payload (et le tag `{GLPI}<id>` conservé dans `ext_refs`).
+
+**Tag ext_refs par handler (`SupportsCustomExtRefsTag`)** : le tag `{GLPI}` est utilisé par défaut par tous les handlers. Un handler dont l'endpoint Mercator cible est configurable, et peut donc entrer en collision avec un autre handler sur le même endpoint (ex. `ApplianceSyncHandler` en mode `applications`, cf. section « Routage configurable des Appliances » plus bas), implémente `SupportsCustomExtRefsTag::extRefsTag()` pour utiliser un tag distinct (ex. `{GLPI-Appliance}`). `GlpiSyncService` construit alors ses index de réconciliation et son nettoyage d'orphelins en ne considérant que le tag du handler courant — les items tagués par un autre handler sont ignorés (log debug), ni supprimés ni marqués `[OLD]`.
 
 **Champs non mappés** : les champs GLPI qui n'ont pas de champ Mercator dédié (ex. numéro de série alternatif, statut, type de baie…) sont automatiquement sérialisés à la suite de la description au format `"nom_champ" : "valeur"`. Les champs vides, nuls ou à 0 sont ignorés. Les structures complexes (`_networkports`, `_devices`…) sont également ignorées.
 
@@ -238,7 +240,7 @@ Certains types doivent être synchronisés avant d'autres pour que les liens et 
  2. locations                   → crée les buildings Mercator (building_id/site_id utilisés par les autres types)
  3. racks                       → crée les bays Mercator (bay_id résolu par network_devices/routers/physical_security_devices/storage_devices ci-dessous)
  4. applications                → crée le catalogue applicatif (nécessaire pour links et activity_links)
- 5. appliances                  → crée les activities (nécessaire pour activity_links)
+ 5. appliances                  → crée les activities, ou des applications si GLPI_APPLIANCE_MERCATOR_ENDPOINT=applications (nécessaire pour activity_links ; exécuté après applications, cf. tag ext_refs {GLPI-Appliance})
  6. workstations                ┐
  7. peripherals                 │
  8. phones                      │
@@ -322,7 +324,7 @@ php application glpi:sync --type=logical_servers --type=physical_servers
 | `sites` | `Location` (racines, sans parent) | `sites` | actifs |
 | `locations` | `Location` | `buildings` | actifs |
 | `applications` | `Software` | `applications` | actifs |
-| `appliances` | `Appliance` | `activities` | actifs |
+| `appliances` | `Appliance` | `activities` (défaut) ou `applications` — cf. `GLPI_APPLIANCE_MERCATOR_ENDPOINT` | actifs |
 | `workstations` | `Computer` (filtré par `GLPI_COMPUTER_TYPES_WORKSTATIONS`) | `workstations` | actifs |
 | `peripherals` | `Peripheral` | `peripherals` | actifs |
 | `phones` | `Phone` | `phones` | actifs |
@@ -383,13 +385,37 @@ php application glpi:sync --type=logical_servers --type=physical_servers
 >
 > **Attention** : un logiciel importé automatiquement par un agent d'inventaire GLPI n'a en général **aucune catégorie assignée** (`softwarecategories_id` vide/0) — assigner une catégorie est une action manuelle dans GLPI. Si vous configurez `GLPI_SOFTWARE_CATEGORIES` alors qu'aucun logiciel n'a de catégorie renseignée côté GLPI, **tous les `Software` seront exclus** (`Filtre sous-type : N item(s) exclus, 0 conservé(s)` dans les logs). En `LOG_LEVEL=debug`, chaque exclusion liste la valeur `softwarecategories_id` reçue pour diagnostiquer. Laissez la variable vide si vos logiciels ne sont pas catégorisés dans GLPI.
 
-#### Activités (`Appliance` → `activities`)
+#### Activités (`Appliance` → `activities`, par défaut)
 
 | Champ GLPI | Champ Mercator |
 |---|---|
 | `name` | `name` |
 | `comment` | `description` |
 | `users_id_tech` | `responsible` |
+
+#### Routage configurable des Appliances (`GLPI_APPLIANCE_MERCATOR_ENDPOINT`, issue #12)
+
+Par défaut, les `Appliance` GLPI sont importées comme `activities` Mercator (table ci-dessus). Certains usages de GLPI utilisent plutôt les Appliances pour inventorier des **services numériques**, qui correspondent conceptuellement à des `applications` Mercator plutôt qu'à des activités. La variable d'environnement `GLPI_APPLIANCE_MERCATOR_ENDPOINT` permet de router les Appliances vers l'un ou l'autre endpoint :
+
+```
+GLPI_APPLIANCE_MERCATOR_ENDPOINT=activities    # défaut, comportement historique
+GLPI_APPLIANCE_MERCATOR_ENDPOINT=applications  # Appliance → application Mercator
+```
+
+Toute autre valeur est ignorée (warning journalisé) et retombe sur `activities` — le connecteur ne plante jamais sur une erreur de configuration.
+
+En mode `applications`, le payload mappé est :
+
+| Champ GLPI | Champ Mercator |
+|---|---|
+| `name` | `name` (tronqué à 64 caractères, cf. troncature `Software` ci-dessus) |
+| `comment` | `description` |
+| `appliancetypes_id` | `type` |
+| `users_id_tech` | `responsible` |
+
+`vendor`, `editor` et `install_date` ne sont **pas** mappés : l'itemtype GLPI `Appliance` n'a pas de champ `manufacturers_id` ni de date d'installation fiable (contrairement à `Software`).
+
+> **Réconciliation `ext_refs` et cohabitation avec les `Software`** : si `applications` reçoit à la fois des `Software` (sync `applications`) et des `Appliance` (sync `appliances` en mode `applications`), les deux syncs doivent utiliser des tags `ext_refs` distincts pour éviter toute collision d'id entre itemtypes GLPI différents et tout nettoyage d'orphelins croisé. Le connecteur tague donc les Appliance importées `{GLPI-Appliance}<id>` (au lieu de `{GLPI}<id>` utilisé par les Software et par le mode `activities`) ; chaque sync ignore silencieusement (log debug) les items Mercator tagués par l'autre. **Cela ne dispense pas d'un risque résiduel** : le nom Mercator (`applications.name`) reste unique, et une Appliance et un Software homonymes seront réconciliés sur **le même enregistrement** Mercator via le repli par nom (comportement documenté, pas un bug — cf. « Doublons de nom au sein d'un même run » plus haut). Si ce n'est pas souhaité, nommez différemment vos Appliances et vos Software dans GLPI.
 
 #### Postes de travail / serveurs logiques / serveurs physiques (`Computer` → `workstations` / `logical-servers` / `physical-servers`)
 
@@ -923,10 +949,12 @@ Les tests utilisent **Mockery** — aucun appel réseau réel. Les fixtures JSON
 | `PhysicalSecurityDeviceMapperTest` | Mapping d'un NetworkEquipment → PhysicalSecurityDevice |
 | `StorageDeviceMapperTest` | Mapping d'un NetworkEquipment → StorageDevice |
 | `RackMapperTest` | Mapping d'un Rack → Bay |
-| `ApplianceMapperTest` | Mapping d'une Appliance → Activity |
+| `ApplianceMapperTest` | Mapping d'une Appliance → Activity (défaut) ou Application (`GLPI_APPLIANCE_MERCATOR_ENDPOINT=applications`) |
+| `ApplianceSyncHandlerTest` | Résolution/validation de `GLPI_APPLIANCE_MERCATOR_ENDPOINT`, tag `extRefsTag()` |
 | `SiteMapperTest` | Mapping d'une Location racine → Site |
 | `LocationMapperTest` | Mapping d'une Location → Building |
 | `GlpiSyncServiceTest` | Logique create / update / orphelins |
+| `GlpiSyncServiceApplianceRoutingTest` | Réconciliation/orphelins scopés par tag ext_refs entre Appliance et Software sur l'endpoint `applications` (issue #12) |
 | `GlpiSyncServiceLinksTest` | Liens workstation ↔ application (`syncLinks`) |
 | `GlpiSyncServiceLocationHierarchyTest` | Résolution `building_id`/`site_id` à travers la hiérarchie Location → Site |
 | `GlpiActivityLinksTest` | Liens activité ↔ application (`syncActivityLinks`) |
