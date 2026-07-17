@@ -449,6 +449,57 @@ it('marque OLD un workstation orphelin sans tag {GLPI} (créé manuellement)', f
     expect($updated[0]['payload']['name'])->toBe('[OLD] PC-ORPHELIN');
 });
 
+// ── Doublons de nom au sein d'un même run (cf. issue #12) ─────────────────────
+
+it('réconcilie deux items GLPI distincts partageant le même nom sur un seul item Mercator', function () {
+    // Deux Software GLPI différents (ids 10 et 11), même nom : cas réel remonté
+    // dans l'issue #12 (même logiciel enregistré séparément dans deux entités GLPI).
+    $software = fn (int $id) => [
+        'id' => $id,
+        'name' => 'Notepad++',
+        'comment' => '',
+        'manufacturers_id' => 0,
+        'softwarecategories_id' => 0,
+        'users_id_tech' => 0,
+        'locations_id' => 0,
+        'date' => null,
+    ];
+    $items = [$software(10), $software(11)];
+
+    $created = [];
+    $updated = [];
+
+    $mercator = mercatorMock([], mercatorBuildingsFixture());
+    $mercator->shouldReceive('create')
+        ->once() // une seule création : le second item doit réconcilier sur le même enregistrement
+        ->andReturnUsing(function (string $ep, array $payload) use (&$created) {
+            $created[] = $payload;
+
+            return ['id' => 500];
+        });
+    $mercator->shouldReceive('update')
+        ->andReturnUsing(function (string $ep, int $id, array $payload) use (&$updated) {
+            $updated[] = compact('id', 'payload');
+
+            return [];
+        });
+
+    $handler = new ApplicationSyncHandler(new ApplicationMapper);
+
+    $stats = (new GlpiSyncService)->sync(
+        glpiMock($items),
+        $mercator,
+        $handler,
+    );
+
+    expect($created)->toHaveCount(1);
+    expect($updated)->toHaveCount(1);
+    expect($updated[0]['id'])->toBe(500);
+    expect($stats['created'])->toBe(1);
+    expect($stats['updated'])->toBe(1);
+    expect($stats['errors'])->toBe(0);
+});
+
 it('retourne les statistiques correctes', function () {
     $mercator = mercatorMock(mercatorWorkstationsFixture(), mercatorBuildingsFixture());
     $mercator->shouldReceive('update')->andReturn([]);

@@ -270,6 +270,20 @@ class GlpiSyncService
                         'site_id' => $payload['site_id'] ?? null,
                     ];
                 }
+
+                // Met à jour mercByGlpiId/mercByName en mémoire pour ce run : deux items
+                // GLPI distincts peuvent partager le même nom (ex. un même logiciel
+                // enregistré séparément dans deux entités GLPI, cf. issue #12). Sans cette
+                // mise à jour, le second item ne "voit" pas l'item Mercator tout juste créé
+                // par le premier (les index ont été construits une fois avant la boucle) et
+                // tente une seconde création en doublon, rejetée par Mercator ("name" est
+                // unique → HTTP 422 "already been taken"). En mettant à jour l'index ici,
+                // le second item est réconcilié (UPDATE) sur le même enregistrement Mercator.
+                if ($mercId !== null) {
+                    $mercEntry = ['id' => $mercId, 'name' => $glpiItem['name'], 'ext_refs' => $payload['ext_refs']];
+                    $mercByGlpiId[$glpiId] = $mercEntry;
+                    $mercByName[strtolower($glpiItem['name'])] = $mercEntry;
+                }
             } catch (Throwable $e) {
                 $stats['errors']++;
                 Log::error("[{$endpoint}] Erreur sur {$glpiItem['name']} : ".$e->getMessage());
