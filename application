@@ -5,6 +5,42 @@ define('LARAVEL_START', microtime(true));
 
 /*
 |--------------------------------------------------------------------------
+| Raise the memory limit for this CLI run
+|--------------------------------------------------------------------------
+|
+| A full sync loads whole GLPI collections into memory (pagination now
+| retrieves collections beyond 1000 items, cf. issue #12 follow-up) and the
+| default CLI php.ini memory_limit (often 128M, inherited from the web SAPI
+| config) can be too low for larger GLPI installs. This process only runs
+| batch synchronisations, never serves web requests, so raising its own
+| limit here is safe and avoids requiring every install to edit php.ini.
+| Never lowers an already-higher (or unlimited, "-1") admin-configured value.
+|
+*/
+
+$minMemoryLimit = '512M';
+$currentMemoryLimit = ini_get('memory_limit');
+
+if ($currentMemoryLimit !== '-1' && parseIniBytes($currentMemoryLimit) < parseIniBytes($minMemoryLimit)) {
+    ini_set('memory_limit', $minMemoryLimit);
+}
+
+function parseIniBytes(string $value): int
+{
+    $value = trim($value);
+    $unit = strtolower(substr($value, -1));
+    $number = (int) $value;
+
+    return match ($unit) {
+        'g' => $number * 1024 * 1024 * 1024,
+        'm' => $number * 1024 * 1024,
+        'k' => $number * 1024,
+        default => $number,
+    };
+}
+
+/*
+|--------------------------------------------------------------------------
 | Register The Auto Loader
 |--------------------------------------------------------------------------
 |

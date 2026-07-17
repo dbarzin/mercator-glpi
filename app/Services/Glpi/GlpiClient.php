@@ -189,8 +189,16 @@ class GlpiClient implements GlpiClientInterface
                 );
             }
 
+            // Append élément par élément (plutôt que array_merge($items, $page)) évite
+            // de recopier l'intégralité du tableau déjà accumulé à chaque page : sur
+            // une grosse collection paginée sur N pages, array_merge en boucle est
+            // O(n²) en mémoire/temps. On évite aussi le spread (...$page), qui lève
+            // une ArgumentCountError si $page contient des clés non numériques
+            // (interprétées comme arguments nommés).
             $page = $response->json() ?? [];
-            $items = array_merge($items, $page);
+            foreach ($page as $entry) {
+                $items[] = $entry;
+            }
 
             $range = $this->parseContentRange($response->header('Content-Range'));
 

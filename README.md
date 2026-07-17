@@ -106,6 +106,8 @@ MercatorClient               — Client HTTP Mercator (API REST, Bearer token)
 
 L'API REST GLPI doit être activée et les tokens configurés (voir [Configuration côté GLPI](#configuration-côté-glpi)).
 
+**Mémoire** : la commande `application` relève automatiquement `memory_limit` à 512M pour son propre process si la valeur PHP CLI configurée est inférieure (sans jamais abaisser une valeur déjà plus haute, ni toucher à une limite illimitée `-1`) — un sync complet charge en mémoire des collections GLPI entières (paginées au-delà de 1000 items, cf. [Filtrage des actifs](#filtrage-des-actifs)), ce qui peut dépasser le défaut PHP courant (souvent 128M). Ce réglage ne s'applique qu'à ce process CLI, jamais au PHP-FPM/Apache qui sert vos autres applications. Pour un très gros parc GLPI, si 512M ne suffit toujours pas, augmentez `memory_limit` dans le php.ini utilisé par la CLI (ou lancez avec `php -d memory_limit=1G application glpi:sync`).
+
 ---
 
 ## Installation
