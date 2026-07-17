@@ -373,6 +373,8 @@ php application glpi:sync --type=logical_servers --type=physical_servers
 | `users_id_tech` | `responsible` |
 | `date` | `install_date` |
 
+> Le champ Mercator `applications.name` est limité à 64 caractères : un nom de logiciel GLPI plus long est automatiquement tronqué à 64 caractères avant envoi (évite un rejet HTTP 422 "max characters"). `product` conserve le nom GLPI complet, non tronqué. La troncature est journalisée en `LOG_LEVEL=debug`.
+>
 > Le catalogue applicatif doit exister avant de synchroniser `links` et `activity_links`. **Synchroniser `applications` avant ces deux types.**
 >
 > `GLPI_SOFTWARE_CATEGORIES` filtre les `Software` par `softwarecategories_id` (noms ou IDs, séparés par virgules) ; vide = toutes catégories acceptées.

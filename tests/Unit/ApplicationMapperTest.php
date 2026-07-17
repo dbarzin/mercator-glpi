@@ -1,6 +1,7 @@
 <?php
 
 use App\Services\Glpi\Mappers\ApplicationMapper;
+use Illuminate\Support\Facades\Log;
 
 // ── Helper ────────────────────────────────────────────────────────────────────
 
@@ -24,6 +25,41 @@ it('mappe product avec le nom du logiciel', function () {
     $result = (new ApplicationMapper)->map(glpiSoftware());
 
     expect($result['product'])->toBe('Firefox');
+});
+
+it('tronque le nom à 64 caractères si le logiciel GLPI dépasse la limite Mercator', function () {
+    $longName = str_repeat('A', 70);
+
+    $result = (new ApplicationMapper)->map(glpiSoftware(['name' => $longName]));
+
+    expect($result['name'])->toHaveLength(64);
+    expect($result['name'])->toBe(mb_substr($longName, 0, 64));
+});
+
+it('ne tronque pas un nom déjà court', function () {
+    $result = (new ApplicationMapper)->map(glpiSoftware(['name' => 'Firefox']));
+
+    expect($result['name'])->toBe('Firefox');
+});
+
+it('ne touche pas product même quand name est tronqué', function () {
+    $longName = str_repeat('A', 80);
+
+    $result = (new ApplicationMapper)->map(glpiSoftware(['name' => $longName]));
+
+    expect($result['product'])->toBe($longName);
+    expect($result['name'])->toHaveLength(64);
+});
+
+it('journalise en debug quand un nom est tronqué', function () {
+    Log::spy();
+
+    $longName = str_repeat('A', 80);
+    (new ApplicationMapper)->map(glpiSoftware(['name' => $longName]));
+
+    Log::shouldHaveReceived('debug')
+        ->withArgs(fn (string $message) => str_contains($message, 'Nom tronqué') && str_contains($message, '64'))
+        ->once();
 });
 
 it('mappe le fabricant en vendor et editor', function () {
