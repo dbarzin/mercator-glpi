@@ -76,8 +76,9 @@ GlpiSyncService              — Orchestration : récupération, filtrage, créa
   │   ├── PhysicalServerSyncHandler         → endpoint: physical-servers
   │   ├── CertificateSyncHandler            → endpoint: certificates
   │   └── ClusterSyncHandler                → endpoint: clusters
-  ├── syncLinks()             — Liens workstation ↔ application (via Computer_SoftwareVersion)
+  ├── syncLinks()             — Liens workstation ↔ application (via Computer._softwares)
   ├── syncActivityLinks()     — Liens activité ↔ application (via Appliance._items.Software)
+  ├── syncApplianceLinks()    — Liens application ↔ serveur logique (via Appliance._items.Computer, mode applications)
   └── Mapper                  — Transformation champ à champ GLPI → Mercator
 GlpiClient                   — Client HTTP GLPI (API REST v1, session-token)
 MercatorClient               — Client HTTP Mercator (API REST, Bearer token)
@@ -90,6 +91,8 @@ MercatorClient               — Client HTTP Mercator (API REST, Bearer token)
 **Doublons de nom au sein d'un même run** : deux items GLPI distincts peuvent porter le même nom (ex. un même logiciel `Software` enregistré séparément dans plusieurs entités GLPI, cf. issue #12). Comme Mercator impose un nom unique sur certains endpoints (ex. `applications`), le premier item crée l'enregistrement Mercator et le second réconcilie dessus (`UPDATE`) au lieu de tenter une seconde création — sans quoi Mercator rejetterait la seconde création avec une erreur HTTP 422 `"name" attribute has already been taken`. Les deux items GLPI finissent donc mappés sur le même enregistrement Mercator ; seul le dernier traité dans l'ordre détermine le contenu final du payload (et le tag `{GLPI}<id>` conservé dans `ext_refs`).
 
 **Tag ext_refs par handler (`SupportsCustomExtRefsTag`)** : le tag `{GLPI}` est utilisé par défaut par tous les handlers. Un handler dont l'endpoint Mercator cible est configurable, et peut donc entrer en collision avec un autre handler sur le même endpoint (ex. `ApplianceSyncHandler` en mode `applications`, cf. section « Routage configurable des Appliances » plus bas), implémente `SupportsCustomExtRefsTag::extRefsTag()` pour utiliser un tag distinct (ex. `{GLPI-Appliance}`). `GlpiSyncService` construit alors ses index de réconciliation et son nettoyage d'orphelins en ne considérant que le tag du handler courant — les items tagués par un autre handler sont ignorés (log debug), ni supprimés ni marqués `[OLD]`.
+
+**Réconciliation des liens (`syncLinks`/`syncActivityLinks`/`syncApplianceLinks`)** : comme pour `sync()`, la correspondance Computer/appliance ↔ workstation/activité/application et logiciel ↔ application/serveur logique se fait prioritairement via `ext_refs` (tag `{GLPI}<id>`), le nom (lowercase, trim) ne servant que de repli pour les items pas encore tagués. Cela évite qu'un homonyme (même nom, GLPI ids différents — cf. « Doublons de nom » ci-dessus, cas réel Notepad++ de l'issue #12) ne fasse hériter à tort ses liens à la workstation, l'application ou l'activité d'un autre item. Les entrées `_softwares`/`_items[<Itemtype>]` renvoyées par GLPI (Software, Computer) sont résolues par id en priorité, nom en repli, de façon défensive (`GlpiSyncService::resolveItemsEntryKey()`, et cascade `extractSoftwareName()` pour `syncLinks()`).
 
 **Champs non mappés** : les champs GLPI qui n'ont pas de champ Mercator dédié (ex. numéro de série alternatif, statut, type de baie…) sont automatiquement sérialisés à la suite de la description au format `"nom_champ" : "valeur"`. Les champs vides, nuls ou à 0 sont ignorés. Les structures complexes (`_networkports`, `_devices`…) sont également ignorées.
 
@@ -253,6 +256,7 @@ Certains types doivent être synchronisés avant d'autres pour que les liens et 
 15. physical_servers            ┘
 16. links                       → lie les workstations ↔ applications (nécessite 4 et 6)
 17. activity_links               → lie les activities ↔ applications (nécessite 4 et 5)
+18. appliance_links              → lie les applications ↔ serveurs logiques (nécessite 5 en mode applications et 14)
 ```
 
 Cet ordre est appliqué automatiquement lors de la synchronisation complète (`php application glpi:sync`).
@@ -281,6 +285,7 @@ php application glpi:sync --type=certificates     # pas inclus dans la sync comp
 php application glpi:sync --type=clusters         # pas inclus dans la sync complète, opt-in
 php application glpi:sync --type=links            # liens workstation ↔ application
 php application glpi:sync --type=activity_links   # liens activité ↔ application
+php application glpi:sync --type=appliance_links  # liens application ↔ serveur logique (mode applications uniquement)
 ```
 
 ### Options disponibles
@@ -340,6 +345,7 @@ php application glpi:sync --type=logical_servers --type=physical_servers
 | `clusters` | `Cluster` (pas dans la sync complète par défaut) | `clusters` | actifs |
 | `links` | `Computer_SoftwareVersion` | pivot `workstation_application` | liens |
 | `activity_links` | `Appliance._items.Software` | pivot `activity_application` | liens |
+| `appliance_links` | `Appliance._items.Computer` | `applications.logical_servers` | liens (mode `applications` uniquement) |
 
 ### Détail des champs par type
 
@@ -543,19 +549,32 @@ Filtré par `GLPI_NETWORK_DEVICE_TYPES_STORAGE_DEVICES` (opt-in, vide = aucun é
 
 #### Liens workstation ↔ application (`links`)
 
-Pour chaque poste de travail présent dans Mercator, récupère individuellement ses logiciels installés depuis GLPI (`with_softwares=1`) et met à jour le pivot `workstation_application`.
+Pour chaque poste de travail présent dans Mercator, récupère individuellement ses logiciels installés depuis GLPI (`with_softwares=1`, `expand_dropdowns=0` — l'id numérique du logiciel est requis pour le matching `ext_refs`) et met à jour le pivot `workstation_application`.
 
-Source GLPI : `Computer._softwares[].softwares_id` (nom du logiciel).
+Source GLPI : `Computer._softwares[].softwares_id`. La correspondance Computer ↔ workstation et logiciel ↔ application se fait via `ext_refs` (`{GLPI}<id>`) en priorité, nom (lowercase, trim) en repli pour les objets pas encore tagués (cf. « Réconciliation des liens » plus haut).
 
 #### Liens activité ↔ application (`activity_links`)
 
 Pour chaque appliance présente dans Mercator en tant qu'activité, récupère individuellement ses logiciels liés depuis GLPI (`with_items=1`) et met à jour le pivot `activity_application` côté application.
 
-Source GLPI : `Appliance._items.Software[].name` (logiciels directement rattachés à l'appliance dans GLPI).
+Source GLPI : `Appliance._items.Software[]` (logiciels directement rattachés à l'appliance dans GLPI). La correspondance appliance ↔ activité et Software ↔ application se fait via `ext_refs` (`{GLPI}<id>`) en priorité, nom en repli (cf. « Réconciliation des liens » plus haut).
 
 **Prérequis** : `applications` et `appliances` doivent avoir été synchronisés au préalable.
 
 **Résolution de la localisation** : le champ `locations_id` GLPI (nom de bâtiment ou salle) est mis en correspondance par nom (insensible à la casse) avec les bâtiments Mercator. Si le nom correspond, `building_id` et `site_id` sont renseignés automatiquement. Il est donc recommandé de synchroniser `locations` en premier.
+
+#### Liens application ↔ serveur logique (`appliance_links`)
+
+Pour chaque Appliance GLPI ayant une application Mercator correspondante (`GLPI_APPLIANCE_MERCATOR_ENDPOINT=applications`), récupère individuellement ses `Computer` liés depuis GLPI (`with_items=1`) et met à jour le champ `logical_servers` du pivot côté application.
+
+Source GLPI : `Appliance._items.Computer[]` (ordinateurs directement rattachés à l'appliance dans GLPI). La correspondance appliance ↔ application se fait via `ext_refs` (`{GLPI-Appliance}<id>`, tag propre au mode `applications` — cf. `SupportsCustomExtRefsTag`) en priorité, nom en repli ; la correspondance Computer ↔ serveur logique via `ext_refs` (`{GLPI}<id>`) en priorité, nom en repli.
+
+**Prérequis** :
+- `GLPI_APPLIANCE_MERCATOR_ENDPOINT=applications` — en mode `activities` (défaut), `appliance_links` n'a rien à lier et journalise un simple warning, sans erreur.
+- `appliances` et `applications` doivent avoir été synchronisés au préalable (catalogue applicatif issu des Appliances).
+- `logical_servers` doit avoir été synchronisé au préalable : seuls les `Computer` déjà présents comme serveur logique Mercator (routés via `GLPI_COMPUTER_TYPES_LOGICAL_SERVERS`) sont liés. Un `Computer` lié à l'Appliance mais non retenu par ce filtre (ex. simple poste de travail) est ignoré silencieusement (log debug), sans compter comme erreur.
+
+**Remplacement, pas fusion** : le tableau `logical_servers` envoyé à chaque exécution **remplace** la liste des serveurs logiques liés à l'application (comportement standard des champs de relation Mercator, identique à `activities`/`applications` sur `links`/`activity_links`) — un `Computer` retiré de l'Appliance côté GLPI est délié à la synchronisation suivante.
 
 ---
 
@@ -715,6 +734,9 @@ grep "\[links\]" storage/logs/laravel.log
 
 # Filtrer les liens activité↔application
 grep "\[activity_links\]" storage/logs/laravel.log
+
+# Filtrer les liens application↔serveur logique
+grep "\[appliance_links\]" storage/logs/laravel.log
 ```
 
 **Exemples de messages debug et leur interprétation :**
@@ -738,6 +760,12 @@ grep "\[activity_links\]" storage/logs/laravel.log
 [2024-06-01 02:00:06] DEBUG: [activity_links] Appliance sans activité Mercator : MON-APP
 → L'appliance "MON-APP" n'a pas de correspondance dans les activités Mercator
    (vérifier que --type=appliances a bien été exécuté avant)
+
+[2024-06-01 02:00:07] INFO:  [appliance_links] ERP → 2 serveur(s) logique(s) : [300, 301]
+→ L'application ERP (issue de l'Appliance GLPI) est liée à 2 serveurs logiques dans Mercator
+
+[2024-06-01 02:00:08] WARNING: [appliance_links] appliance_links nécessite GLPI_APPLIANCE_MERCATOR_ENDPOINT=applications — synchronisation ignorée
+→ appliance_links n'a rien à faire tant que les Appliances sont routées vers activities (mode par défaut)
 ```
 
 ### Cas d'erreurs fréquents et solutions
@@ -859,6 +887,18 @@ LOG_LEVEL=debug php application glpi:sync --type=activity_links
 grep "\[activity_links\]" storage/logs/laravel.log
 ```
 
+#### Aucun lien application↔serveur logique créé (`appliance_links`)
+
+Prérequis :
+1. `GLPI_APPLIANCE_MERCATOR_ENDPOINT=applications` — en mode `activities` (défaut), `appliance_links` ne fait rien (warning journalisé, ce n'est pas une erreur)
+2. Les syncs `appliances`, `applications` et `logical_servers` doivent avoir été exécutées avant `appliance_links`
+3. Les `Computer` doivent être **directement rattachés aux Appliances** dans GLPI (onglet "Éléments liés" → Ordinateur) et routés vers `logical-servers` via `GLPI_COMPUTER_TYPES_LOGICAL_SERVERS`
+
+```bash
+LOG_LEVEL=debug php application glpi:sync --type=appliance_links
+grep "\[appliance_links\]" storage/logs/laravel.log
+```
+
 ---
 
 ## Étendre le connecteur
@@ -955,9 +995,10 @@ Les tests utilisent **Mockery** — aucun appel réseau réel. Les fixtures JSON
 | `LocationMapperTest` | Mapping d'une Location → Building |
 | `GlpiSyncServiceTest` | Logique create / update / orphelins |
 | `GlpiSyncServiceApplianceRoutingTest` | Réconciliation/orphelins scopés par tag ext_refs entre Appliance et Software sur l'endpoint `applications` (issue #12) |
-| `GlpiSyncServiceLinksTest` | Liens workstation ↔ application (`syncLinks`) |
+| `GlpiSyncServiceLinksTest` | Liens workstation ↔ application (`syncLinks`), y compris réconciliation par `ext_refs` et homonymes |
 | `GlpiSyncServiceLocationHierarchyTest` | Résolution `building_id`/`site_id` à travers la hiérarchie Location → Site |
-| `GlpiActivityLinksTest` | Liens activité ↔ application (`syncActivityLinks`) |
+| `GlpiActivityLinksTest` | Liens activité ↔ application (`syncActivityLinks`), y compris réconciliation par `ext_refs` et homonymes |
+| `GlpiApplianceLinksTest` | Liens application ↔ serveur logique (`syncApplianceLinks`), mode `applications` requis |
 | `GlpiEntityFilterTest` | Filtrage par entité GLPI (`--entity`, `GLPI_ENTITY_ID`) |
 | `GlpiClientPaginationTest` | Pagination automatique de `GlpiClient::getItems()` au-delà de 1000 items (`Content-Range`) |
 | `GlpiStatusFilterTest` | Filtrage par statut (`GLPI_ALLOWED_STATES*`) |

@@ -129,6 +129,7 @@ class GlpiSyncCommand extends Command
             'physical_servers',
             'links',
             'activity_links',
+            'appliance_links',
         ];
         $types = $this->option('type') ?: $defaultTypes;
 
@@ -170,6 +171,26 @@ class GlpiSyncCommand extends Command
                     $globalStats['errors']  += $linkStats['errors'];
                 } catch (Throwable $e) {
                     $this->error('  Erreur lors de la sync activity_links : ' . $e->getMessage());
+                    $globalStats['errors']++;
+                }
+                $this->line('');
+                continue;
+            }
+
+            if ($type === 'appliance_links') {
+                $this->line('  <fg=cyan>─── appliance_links ───</>');
+                try {
+                    $linkStats = $syncService->syncApplianceLinks($glpi, $mercator, $dryRun);
+                    $this->line(sprintf(
+                        '  <fg=yellow>~%d mis à jour</>  <fg=gray>%d ignorés</>  <fg=red>%d erreurs</>',
+                        $linkStats['updated'],
+                        $linkStats['skipped'],
+                        $linkStats['errors'],
+                    ));
+                    $globalStats['updated'] += $linkStats['updated'];
+                    $globalStats['errors']  += $linkStats['errors'];
+                } catch (Throwable $e) {
+                    $this->error('  Erreur lors de la sync appliance_links : ' . $e->getMessage());
                     $globalStats['errors']++;
                 }
                 $this->line('');

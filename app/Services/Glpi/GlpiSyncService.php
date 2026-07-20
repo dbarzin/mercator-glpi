@@ -358,6 +358,10 @@ class GlpiSyncService
     /**
      * Synchronise les liens workstation↔application depuis GLPI vers Mercator.
      *
+     * Réconciliation Computer↔workstation et logiciel↔application via ext_refs
+     * ({GLPI}<id>) en priorité, nom (lowercase, trim) en repli pour les items
+     * Mercator pas encore tagués (cf. buildMercatorIndexes()).
+     *
      * @return array{updated: int, skipped: int, errors: int}
      */
     public function syncLinks(
@@ -378,39 +382,41 @@ class GlpiSyncService
         $appItems = $mercator->getAll('applications');
 
         // ── 2. Index Mercator ─────────────────────────────────────────────────
+        // Tag {GLPI} : sur l'endpoint "applications", des items peuvent aussi être
+        // tagués {GLPI-Appliance}<id> (Appliance routées en mode applications, cf.
+        // issue #12) — extractGlpiId() avec le tag {GLPI} ne les matche pas (le
+        // littéral "{GLPI}" n'apparaît pas dans "{GLPI-Appliance}..."), ils sont donc
+        // naturellement ignorés par cet index.
 
-        $wsMap = [];
-        foreach ($wsItems as $ws) {
-            $wsMap[strtolower($ws['name'])] = [
-                'id' => $ws['id'],
-                'name' => $ws['name'],
-            ];
-        }
-
-        $appMap = [];
-        foreach ($appItems as $app) {
-            $appMap[strtolower($app['name'])] = $app['id'];
-        }
+        $wsIndex = $this->buildMercatorIndexes($wsItems, '{GLPI}');
+        $appIndex = $this->buildMercatorIndexes($appItems, '{GLPI}');
 
         Log::info(sprintf(
             '[links] %d computers GLPI, %d workstations Mercator, %d applications Mercator',
             count($computers),
-            count($wsMap),
-            count($appMap),
+            count($wsItems),
+            count($appItems),
         ));
 
         // ── 3. Pour chaque computer présent dans Mercator : récupérer ses logiciels ──
 
         foreach ($computers as $computer) {
-            $computerName = strtolower(trim($computer['name'] ?? ''));
+            $ws = $this->resolveMercatorMatch(
+                $wsIndex,
+                (string) $computer['id'],
+                strtolower(trim($computer['name'] ?? ''))
+            );
 
-            if (! isset($wsMap[$computerName])) {
+            if ($ws === null) {
                 continue;
             }
 
+            // expand_dropdowns=0 : softwares_id doit rester l'id GLPI numérique pour
+            // le matching ext_refs (cf. buildItemRackMap()/Item_Rack, issue #8) — la
+            // valeur par défaut (1) l'expanse en nom et casse la résolution par id.
             $detail = $glpi->getItem('Computer', $computer['id'], [
                 'with_softwares' => 1,
-                'expand_dropdowns' => 1,
+                'expand_dropdowns' => 0,
             ]);
 
             $softwares = $detail['_softwares']
@@ -421,18 +427,37 @@ class GlpiSyncService
             $applicationIds = [];
 
             foreach ($softwares as $software) {
-                $softwareName = $this->extractSoftwareName($software);
+                $softwaresId = $software['softwares_id'] ?? null;
 
-                if (! $softwareName) {
-                    continue;
+                $app = null;
+                if (is_numeric($softwaresId)) {
+                    $app = $appIndex['byGlpiId'][(string) (int) $softwaresId] ?? null;
+
+                    if ($app !== null) {
+                        Log::debug("[links] Logiciel #{$softwaresId} résolu via ext_refs {GLPI}{$softwaresId}");
+                    }
                 }
 
-                if (isset($appMap[$softwareName])) {
-                    $applicationIds[] = $appMap[$softwareName];
-                } else {
-                    $stats['skipped']++;
-                    Log::debug("[links] Logiciel absent de Mercator : {$softwareName}");
+                if ($app === null) {
+                    $softwareName = $this->extractSoftwareName($software);
+
+                    if (! $softwareName) {
+                        continue;
+                    }
+
+                    $app = $appIndex['byName'][$softwareName] ?? null;
+
+                    if ($app !== null) {
+                        Log::debug("[links] Logiciel résolu via nom : {$softwareName}");
+                    } else {
+                        $stats['skipped']++;
+                        Log::debug("[links] Logiciel absent de Mercator : {$softwareName}");
+
+                        continue;
+                    }
                 }
+
+                $applicationIds[] = $app['id'];
             }
 
             if (empty($applicationIds)) {
@@ -440,8 +465,8 @@ class GlpiSyncService
             }
 
             $uniqueAppIds = array_values(array_unique($applicationIds));
-            $workstationId = $wsMap[$computerName]['id'];
-            $workstationName = $wsMap[$computerName]['name'];
+            $workstationId = $ws['id'];
+            $workstationName = $ws['name'];
 
             try {
                 if (! $dryRun) {
@@ -460,13 +485,13 @@ class GlpiSyncService
                 }
                 $stats['updated']++;
                 Log::info(sprintf('[links] %s → %d application(s) : [%s]',
-                    $computerName,
+                    $workstationName,
                     count($uniqueAppIds),
                     implode(', ', $uniqueAppIds)
                 ));
             } catch (Throwable $e) {
                 $stats['errors']++;
-                Log::error("[links] Erreur pour {$computerName} : ".$e->getMessage());
+                Log::error("[links] Erreur pour {$workstationName} : ".$e->getMessage());
             }
         }
 
@@ -478,8 +503,12 @@ class GlpiSyncService
      *
      * Chaque Appliance GLPI est récupérée individuellement avec with_items=1.
      * Les logiciels liés (Software) sont mis en correspondance avec les
-     * Application Mercator par nom. La mise à jour passe par le côté Application
+     * Application Mercator. La mise à jour passe par le côté Application
      * (ApplicationController.update → activities()->sync([...])).
+     *
+     * Réconciliation appliance↔activité et software↔application via ext_refs
+     * ({GLPI}<id>) en priorité, nom (lowercase, trim) en repli pour les items
+     * Mercator pas encore tagués (cf. buildMercatorIndexes()).
      *
      * @return array{updated: int, skipped: int, errors: int}
      */
@@ -502,34 +531,31 @@ class GlpiSyncService
 
         // ── 2. Index Mercator ─────────────────────────────────────────────────
 
-        $activityMap = [];
-        foreach ($activityItems as $act) {
-            $activityMap[strtolower($act['name'])] = $act['id'];
-        }
-
-        $appMap = [];
-        foreach ($appItems as $app) {
-            $appMap[strtolower($app['name'])] = ['id' => $app['id'], 'name' => $app['name']];
-        }
+        $activityIndex = $this->buildMercatorIndexes($activityItems, '{GLPI}');
+        $appIndex = $this->buildMercatorIndexes($appItems, '{GLPI}');
 
         Log::info(sprintf(
             '[activity_links] %d appliances GLPI, %d activités Mercator, %d applications Mercator',
             count($appliances),
-            count($activityMap),
-            count($appMap),
+            count($activityItems),
+            count($appItems),
         ));
 
-        // ── 3. Construire le map software_name → [activity_ids] ──────────────
+        // ── 3. Construire le map application_mercator_id → [activity_ids] ─────
         // Pour chaque Appliance, on récupère individuellement ses Software liés
         // (with_items=1 n'est pas garanti sur les requêtes de liste).
 
-        $softwareToActivities = []; // lower(software_name) → [activity_id, ...]
+        $appToActivities = []; // application_mercator_id → [activity_id, ...]
+        $appNames = []; // application_mercator_id → name (pour le payload)
 
         foreach ($appliances as $appliance) {
-            $applianceKey = strtolower(trim($appliance['name'] ?? ''));
-            $activityId = $activityMap[$applianceKey] ?? null;
+            $activity = $this->resolveMercatorMatch(
+                $activityIndex,
+                (string) $appliance['id'],
+                strtolower(trim($appliance['name'] ?? ''))
+            );
 
-            if ($activityId === null) {
+            if ($activity === null) {
                 $stats['skipped']++;
                 Log::debug("[activity_links] Appliance sans activité Mercator : {$appliance['name']}");
 
@@ -549,40 +575,190 @@ class GlpiSyncService
             }
 
             foreach ($softwareItems as $sw) {
-                $swName = strtolower(trim($sw['name'] ?? ''));
-                if ($swName === '') {
+                $key = $this->resolveItemsEntryKey($sw);
+
+                $app = $key['id'] !== null
+                    ? ($appIndex['byGlpiId'][(string) $key['id']] ?? null)
+                    : null;
+
+                if ($app !== null) {
+                    Log::debug("[activity_links] Software #{$key['id']} résolu via ext_refs {GLPI}{$key['id']}");
+                } elseif ($key['name'] !== null) {
+                    $app = $appIndex['byName'][$key['name']] ?? null;
+
+                    if ($app !== null) {
+                        Log::debug("[activity_links] Software résolu via nom : {$key['name']}");
+                    }
+                }
+
+                if ($app === null) {
+                    Log::debug("[activity_links] Logiciel lié à l'appliance {$appliance['name']} sans application Mercator correspondante (id=".($key['id'] ?? '?').', name='.($key['name'] ?? '?').')');
+
                     continue;
                 }
-                $softwareToActivities[$swName][] = $activityId;
+
+                $appToActivities[$app['id']][] = $activity['id'];
+                $appNames[$app['id']] = $app['name'];
             }
         }
 
-        // ── 4. Pour chaque Application Mercator : synchroniser ses activités ──
+        // ── 4. Pour chaque Application Mercator concernée : synchroniser ses activités ──
 
-        foreach ($appMap as $appName => $appEntry) {
-            $activityIds = array_values(array_unique($softwareToActivities[$appName] ?? []));
-
-            if (empty($activityIds)) {
-                continue;
-            }
+        foreach ($appToActivities as $appId => $activityIds) {
+            $appName = $appNames[$appId];
+            $uniqueActivityIds = array_values(array_unique($activityIds));
 
             try {
                 if (! $dryRun) {
-                    $mercator->update('applications', $appEntry['id'], [
-                        'name' => $appEntry['name'],
-                        'activities' => $activityIds,
+                    $mercator->update('applications', $appId, [
+                        'name' => $appName,
+                        'activities' => $uniqueActivityIds,
                     ]);
                 }
                 $stats['updated']++;
                 Log::info(sprintf(
                     '[activity_links] %s → %d activité(s) : [%s]',
-                    $appEntry['name'],
-                    count($activityIds),
-                    implode(', ', $activityIds),
+                    $appName,
+                    count($uniqueActivityIds),
+                    implode(', ', $uniqueActivityIds),
                 ));
             } catch (Throwable $e) {
                 $stats['errors']++;
-                Log::error("[activity_links] Erreur pour {$appEntry['name']} : ".$e->getMessage());
+                Log::error("[activity_links] Erreur pour {$appName} : ".$e->getMessage());
+            }
+        }
+
+        return $stats;
+    }
+
+    /**
+     * Synchronise les liens application↔serveur logique depuis GLPI vers Mercator,
+     * via les Computer rattachés à chaque Appliance GLPI (cf. issue #12, suite).
+     *
+     * Ne s'exécute utilement qu'en mode GLPI_APPLIANCE_MERCATOR_ENDPOINT=applications
+     * (sans quoi il n'existe pas d'application Mercator issue d'une Appliance à lier).
+     * En mode "activities" (ou configuration invalide), retourne des stats vides sans
+     * erreur : le connecteur peut tourner en cron et ne doit pas planter.
+     *
+     * @return array{updated: int, skipped: int, errors: int}
+     */
+    public function syncApplianceLinks(
+        GlpiClientInterface $glpi,
+        MercatorClientInterface $mercator,
+        bool $dryRun = false,
+    ): array {
+        $stats = ['updated' => 0, 'skipped' => 0, 'errors' => 0];
+
+        $configuredEndpoint = config('glpi.appliance_mercator_endpoint', 'activities');
+
+        if ($configuredEndpoint !== 'applications') {
+            Log::warning('[appliance_links] appliance_links nécessite GLPI_APPLIANCE_MERCATOR_ENDPOINT=applications — synchronisation ignorée');
+
+            return $stats;
+        }
+
+        // ── 1. Chargement ─────────────────────────────────────────────────────
+
+        $appliances = $glpi->getItems('Appliance', [
+            'range' => '0-999',
+            'expand_dropdowns' => 1,
+        ]);
+
+        $appItems = $mercator->getAll('applications');
+        $logicalServerItems = $mercator->getAll('logical-servers');
+
+        // ── 2. Index Mercator ─────────────────────────────────────────────────
+
+        $appIndex = $this->buildMercatorIndexes($appItems, '{GLPI-Appliance}');
+        $lsIndex = $this->buildMercatorIndexes($logicalServerItems, '{GLPI}');
+
+        Log::info(sprintf(
+            '[appliance_links] %d appliances GLPI, %d applications Mercator, %d serveurs logiques Mercator',
+            count($appliances),
+            count($appItems),
+            count($logicalServerItems),
+        ));
+
+        // ── 3. Pour chaque Appliance : lier son application à ses serveurs logiques ──
+
+        foreach ($appliances as $appliance) {
+            $app = $this->resolveMercatorMatch(
+                $appIndex,
+                (string) $appliance['id'],
+                strtolower(trim($appliance['name'] ?? ''))
+            );
+
+            if ($app === null) {
+                $stats['skipped']++;
+                Log::debug("[appliance_links] Appliance sans application Mercator correspondante : {$appliance['name']}");
+
+                continue;
+            }
+
+            $detail = $glpi->getItem('Appliance', $appliance['id'], [
+                'with_items' => 1,
+                'expand_dropdowns' => 1,
+            ]);
+            $computerItems = $detail['_items']['Computer'] ?? [];
+
+            if (empty($computerItems)) {
+                Log::debug("[appliance_links] Appliance sans Computer lié : {$appliance['name']}");
+
+                continue;
+            }
+
+            $logicalServerIds = [];
+
+            foreach ($computerItems as $computerEntry) {
+                $key = $this->resolveItemsEntryKey($computerEntry);
+
+                $ls = $key['id'] !== null
+                    ? ($lsIndex['byGlpiId'][(string) $key['id']] ?? null)
+                    : null;
+
+                if ($ls !== null) {
+                    Log::debug("[appliance_links] Computer #{$key['id']} résolu via ext_refs {GLPI}{$key['id']}");
+                } elseif ($key['name'] !== null) {
+                    $ls = $lsIndex['byName'][$key['name']] ?? null;
+
+                    if ($ls !== null) {
+                        Log::debug("[appliance_links] Computer résolu via nom : {$key['name']}");
+                    }
+                }
+
+                if ($ls === null) {
+                    $identifier = $key['id'] !== null ? "#{$key['id']}" : ($key['name'] ?? '?');
+                    Log::debug("[appliance_links] Computer {$identifier} lié à l'appliance {$appliance['name']} sans serveur logique Mercator correspondant");
+
+                    continue;
+                }
+
+                $logicalServerIds[] = $ls['id'];
+            }
+
+            if (empty($logicalServerIds)) {
+                continue;
+            }
+
+            $uniqueIds = array_values(array_unique($logicalServerIds));
+
+            try {
+                if (! $dryRun) {
+                    $mercator->update('applications', $app['id'], [
+                        'name' => $app['name'],
+                        'logical_servers' => $uniqueIds,
+                    ]);
+                }
+                $stats['updated']++;
+                Log::info(sprintf(
+                    '[appliance_links] %s → %d serveur(s) logique(s) : [%s]',
+                    $app['name'],
+                    count($uniqueIds),
+                    implode(', ', $uniqueIds),
+                ));
+            } catch (Throwable $e) {
+                $stats['errors']++;
+                Log::error("[appliance_links] Erreur pour {$app['name']} : ".$e->getMessage());
             }
         }
 
@@ -686,6 +862,75 @@ class GlpiSyncService
         }
 
         return '';
+    }
+
+    /**
+     * Indexe une collection d'items Mercator par ext_refs (tag donné, extraction de
+     * l'id GLPI) et par nom (lowercase, trim) en repli. Reprend la logique de
+     * réconciliation de l'étape 5 de sync() ; utilisée par syncActivityLinks() et
+     * syncApplianceLinks() (non utilisée par sync() lui-même, qui gère sa propre
+     * mise à jour d'index en cours de boucle — cf. commentaire de l'étape 6).
+     *
+     * @return array{byGlpiId: array<string, array{id: mixed, name: string, ext_refs: ?string}>, byName: array<string, array{id: mixed, name: string, ext_refs: ?string}>}
+     */
+    private function buildMercatorIndexes(array $items, string $extRefsTag = '{GLPI}'): array
+    {
+        $byGlpiId = [];
+        $byName = [];
+
+        foreach ($items as $item) {
+            $entry = [
+                'id' => $item['id'],
+                'name' => $item['name'],
+                'ext_refs' => $item['ext_refs'] ?? null,
+            ];
+
+            $glpiId = $this->extractGlpiId($entry['ext_refs'], $extRefsTag);
+            if ($glpiId !== null) {
+                $byGlpiId[(string) $glpiId] = $entry;
+            }
+
+            $byName[strtolower(trim($item['name'] ?? ''))] ??= $entry;
+        }
+
+        return ['byGlpiId' => $byGlpiId, 'byName' => $byName];
+    }
+
+    /**
+     * Cherche une correspondance dans un index construit par buildMercatorIndexes() :
+     * id GLPI en priorité, nom (lowercase, trim) en repli.
+     */
+    private function resolveMercatorMatch(array $index, string $glpiIdKey, string $nameKey): ?array
+    {
+        return $index['byGlpiId'][$glpiIdKey] ?? $index['byName'][$nameKey] ?? null;
+    }
+
+    /**
+     * Résout la clé de correspondance (id GLPI ou nom) d'une entrée _items[<Itemtype>]
+     * de detail Appliance (with_items=1). GLPI peut renvoyer soit l'item sérialisé
+     * (avec un 'id' numérique et un 'name'), soit — selon les versions/itemtypes —
+     * une ligne pivot Appliance_Item ('items_id', 'itemtype') sans 'id' propre : les
+     * deux formes sont gérées défensivement, priorité à l'id numérique. Conçue pour
+     * être réutilisable au-delà de Computer/Software (physical servers, databases,
+     * clusters — non implémenté dans cette itération).
+     *
+     * @return array{id: ?int, name: ?string}
+     */
+    private function resolveItemsEntryKey(array $entry): array
+    {
+        $id = null;
+        if (isset($entry['id']) && is_numeric($entry['id'])) {
+            $id = (int) $entry['id'];
+        } elseif (isset($entry['items_id']) && is_numeric($entry['items_id'])) {
+            $id = (int) $entry['items_id'];
+        }
+
+        $name = null;
+        if (isset($entry['name']) && trim((string) $entry['name']) !== '') {
+            $name = strtolower(trim((string) $entry['name']));
+        }
+
+        return ['id' => $id, 'name' => $name];
     }
 
     // -------------------------------------------------------------------------

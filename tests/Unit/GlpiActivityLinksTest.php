@@ -192,3 +192,136 @@ it('retourne les statistiques correctes', function () {
     expect($stats['updated'])->toBe(2);
     expect($stats['errors'])->toBe(0);
 });
+
+// ── Réconciliation ext_refs (refactoring, cf. issue #12 — suite) ──────────────
+
+it('matche l\'appliance à son activité via ext_refs même si l\'activité a été renommée côté Mercator', function () {
+    $updated = [];
+
+    $appliances = [
+        ['id' => 7, 'name' => 'ERP-PRODUCTION', '_items' => ['Software' => [['id' => 10, 'name' => 'LibreOffice']]]],
+    ];
+    // L'activité Mercator a un nom différent de l'appliance GLPI, mais est taguée {GLPI}7
+    $activities = [['id' => 100, 'name' => 'Nom renommé côté Mercator', 'ext_refs' => '{GLPI}7']];
+    $applications = [['id' => 20, 'name' => 'LibreOffice']];
+
+    $mercator = activityLinksMercatorMock($activities, $applications);
+    $mercator->shouldReceive('update')
+        ->andReturnUsing(function (string $ep, int $id, array $payload) use (&$updated) {
+            $updated[$id] = $payload;
+
+            return [];
+        });
+
+    (new GlpiSyncService)->syncActivityLinks(
+        activityLinksGlpiMock($appliances),
+        $mercator,
+    );
+
+    expect($updated[20]['activities'])->toContain(100);
+});
+
+it('matche le Software à son application via ext_refs même si l\'application a été renommée côté Mercator', function () {
+    $updated = [];
+
+    $appliances = [
+        ['id' => 1, 'name' => 'ERP-PRODUCTION', '_items' => ['Software' => [['id' => 99, 'name' => 'Nom GLPI du logiciel']]]],
+    ];
+    $activities = [['id' => 100, 'name' => 'ERP-PRODUCTION']];
+    // L'application Mercator a un nom différent du Software GLPI, mais est taguée {GLPI}99
+    $applications = [['id' => 20, 'name' => 'Nom renommé côté Mercator', 'ext_refs' => '{GLPI}99']];
+
+    $mercator = activityLinksMercatorMock($activities, $applications);
+    $mercator->shouldReceive('update')
+        ->andReturnUsing(function (string $ep, int $id, array $payload) use (&$updated) {
+            $updated[$id] = $payload;
+
+            return [];
+        });
+
+    (new GlpiSyncService)->syncActivityLinks(
+        activityLinksGlpiMock($appliances),
+        $mercator,
+    );
+
+    expect($updated[20]['activities'])->toContain(100);
+});
+
+it('distingue deux Software GLPI homonymes via ext_refs (le matching par nom aurait tout fusionné)', function () {
+    $updated = [];
+
+    $appliances = [
+        ['id' => 1, 'name' => 'Appliance-A', '_items' => ['Software' => [['id' => 10, 'name' => 'MonLogiciel']]]],
+        ['id' => 2, 'name' => 'Appliance-B', '_items' => ['Software' => [['id' => 11, 'name' => 'MonLogiciel']]]],
+    ];
+    $activities = [
+        ['id' => 100, 'name' => 'Appliance-A'],
+        ['id' => 101, 'name' => 'Appliance-B'],
+    ];
+    // Deux applications Mercator homonymes, distinguées uniquement par ext_refs
+    $applications = [
+        ['id' => 20, 'name' => 'MonLogiciel', 'ext_refs' => '{GLPI}10'],
+        ['id' => 21, 'name' => 'MonLogiciel', 'ext_refs' => '{GLPI}11'],
+    ];
+
+    $mercator = activityLinksMercatorMock($activities, $applications);
+    $mercator->shouldReceive('update')
+        ->andReturnUsing(function (string $ep, int $id, array $payload) use (&$updated) {
+            $updated[$id] = $payload;
+
+            return [];
+        });
+
+    (new GlpiSyncService)->syncActivityLinks(
+        activityLinksGlpiMock($appliances),
+        $mercator,
+    );
+
+    expect($updated[20]['activities'])->toBe([100]);
+    expect($updated[21]['activities'])->toBe([101]);
+});
+
+it('retombe sur le matching par nom quand activités et applications ne sont pas taguées (non-régression)', function () {
+    $updated = [];
+
+    $mercator = activityLinksMercatorMock(testActivities(), testApplications());
+    $mercator->shouldReceive('update')
+        ->andReturnUsing(function (string $ep, int $id, array $payload) use (&$updated) {
+            $updated[$id] = $payload;
+
+            return [];
+        });
+
+    (new GlpiSyncService)->syncActivityLinks(
+        activityLinksGlpiMock(testAppliances()),
+        $mercator,
+    );
+
+    expect($updated[20]['activities'])->toContain(100);
+    expect($updated[21]['activities'])->toContain(100)->toContain(101);
+});
+
+it('retombe sur le nom sans planter quand _items[Software] ne contient pas d\'id', function () {
+    $updated = [];
+
+    $appliances = [
+        ['id' => 1, 'name' => 'ERP-PRODUCTION', '_items' => ['Software' => [['name' => 'LibreOffice']]]],
+    ];
+    $activities = [['id' => 100, 'name' => 'ERP-PRODUCTION']];
+    $applications = [['id' => 20, 'name' => 'LibreOffice']];
+
+    $mercator = activityLinksMercatorMock($activities, $applications);
+    $mercator->shouldReceive('update')
+        ->andReturnUsing(function (string $ep, int $id, array $payload) use (&$updated) {
+            $updated[$id] = $payload;
+
+            return [];
+        });
+
+    (new GlpiSyncService)->syncActivityLinks(
+        activityLinksGlpiMock($appliances),
+        $mercator,
+    );
+
+    expect($updated[20]['activities'])->toContain(100);
+});

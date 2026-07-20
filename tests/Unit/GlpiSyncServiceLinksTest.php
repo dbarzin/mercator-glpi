@@ -115,8 +115,10 @@ it('n\'associe pas deux fois le même logiciel', function () {
 });
 
 it('ignore un computer dont le poste n\'existe pas dans Mercator', function () {
+    // id 999 : ne doit collisionner avec aucun tag ext_refs des fixtures Mercator
+    // (mercator_workstations.json contient une entrée taguée {GLPI}99, cf. non-régression ext_refs)
     $computers = [[
-        'id'       => 99,
+        'id'       => 999,
         'name'     => 'PC-INCONNU',
         'softwares' => [['softwares_id' => 'Firefox', 'softwareversions_id' => '120']],
     ]];
@@ -172,4 +174,201 @@ it('retourne les statistiques correctes', function () {
 
     expect($stats['updated'])->toBe(2);
     expect($stats['errors'])->toBe(0);
+});
+
+// ── Réconciliation ext_refs (refactoring) ──────────────────────────────────────
+
+it('matche le Computer à sa workstation via ext_refs même si elle a été renommée côté Mercator', function () {
+    $updated = [];
+
+    $computers = [[
+        'id' => 5,
+        'name' => 'PC-RENOMME-DANS-GLPI',
+        'softwares' => [],
+    ]];
+    // Workstation Mercator taguée {GLPI}5, nom différent du Computer GLPI
+    $workstations = [['id' => 50, 'name' => 'Nom Mercator différent', 'ext_refs' => '{GLPI}5']];
+
+    $mercator = linkMercatorMock($workstations, mercatorApplicationsFixture());
+    $mercator->shouldReceive('update')
+        ->andReturnUsing(function (string $ep, int $id, array $payload) use (&$updated) {
+            $updated[] = compact('id', 'payload');
+
+            return [];
+        });
+
+    // Aucun logiciel : pas de PUT attendu, on vérifie juste qu'aucune erreur ne survient
+    // et que le Computer est bien résolu (pas de crash / pas de skip prématuré).
+    (new GlpiSyncService())->syncLinks(linkGlpiMock($computers), $mercator);
+
+    expect($updated)->toBeEmpty(); // pas de logiciel → pas de PUT, mais pas d'exception non plus
+});
+
+it('matche un logiciel à son application via ext_refs (softwares_id numérique) même si l\'application a été renommée', function () {
+    $updated = [];
+
+    $computers = [[
+        'id' => 42,
+        'name' => 'PC-DIDIER-01',
+        'softwares' => [
+            ['softwares_id' => 99],
+        ],
+    ]];
+    $workstations = mercatorWorkstationsFixture();
+    // Application Mercator taguée {GLPI}99, nom différent du Software GLPI
+    $applications = [['id' => 77, 'name' => 'Nom Mercator différent', 'ext_refs' => '{GLPI}99']];
+
+    $mercator = linkMercatorMock($workstations, $applications);
+    $mercator->shouldReceive('update')
+        ->andReturnUsing(function (string $ep, int $id, array $payload) use (&$updated) {
+            $updated[$id] = $payload;
+
+            return [];
+        });
+
+    (new GlpiSyncService())->syncLinks(linkGlpiMock($computers), $mercator);
+
+    expect($updated[10]['applications'])->toBe([77]);
+});
+
+it('distingue deux Software GLPI homonymes via ext_refs (softwares_id numérique)', function () {
+    $updated = [];
+
+    $computers = [
+        ['id' => 42, 'name' => 'PC-DIDIER-01', 'softwares' => [['softwares_id' => 10]]],
+        ['id' => 43, 'name' => 'PC-NOUVEAU-01', 'softwares' => [['softwares_id' => 11]]],
+    ];
+    $workstations = wsWithNewPC();
+    // Deux applications Mercator homonymes, distinguées uniquement par ext_refs
+    $applications = [
+        ['id' => 200, 'name' => 'MonLogiciel', 'ext_refs' => '{GLPI}10'],
+        ['id' => 201, 'name' => 'MonLogiciel', 'ext_refs' => '{GLPI}11'],
+    ];
+
+    $mercator = linkMercatorMock($workstations, $applications);
+    $mercator->shouldReceive('update')
+        ->andReturnUsing(function (string $ep, int $id, array $payload) use (&$updated) {
+            $updated[$id] = $payload;
+
+            return [];
+        });
+
+    (new GlpiSyncService())->syncLinks(linkGlpiMock($computers), $mercator);
+
+    expect($updated[10]['applications'])->toBe([200]);
+    expect($updated[13]['applications'])->toBe([201]);
+});
+
+it('ne matche jamais une application taguée {GLPI-Appliance} via l\'index {GLPI} des Software', function () {
+    $updated = [];
+
+    $computers = [[
+        'id' => 42,
+        'name' => 'PC-DIDIER-01',
+        'softwares' => [['softwares_id' => 10]],
+    ]];
+    $workstations = mercatorWorkstationsFixture();
+    // {GLPI-Appliance}10 ne doit pas être confondu avec {GLPI}10 : seule l'entrée
+    // taguée {GLPI}10 doit être retenue par l'index {GLPI} des applications.
+    $applications = [
+        ['id' => 500, 'name' => 'Appliance-Homonyme', 'ext_refs' => '{GLPI-Appliance}10'],
+        ['id' => 20, 'name' => 'LogicielCorrect', 'ext_refs' => '{GLPI}10'],
+    ];
+
+    $mercator = linkMercatorMock($workstations, $applications);
+    $mercator->shouldReceive('update')
+        ->andReturnUsing(function (string $ep, int $id, array $payload) use (&$updated) {
+            $updated[$id] = $payload;
+
+            return [];
+        });
+
+    (new GlpiSyncService())->syncLinks(linkGlpiMock($computers), $mercator);
+
+    expect($updated[10]['applications'])->toBe([20]);
+    expect($updated[10]['applications'])->not->toContain(500);
+});
+
+it('retombe sur le nom sans planter quand softwares_id n\'est pas numérique', function () {
+    $updated = [];
+
+    $computers = [[
+        'id' => 42,
+        'name' => 'PC-DIDIER-01',
+        'softwares' => [
+            ['softname' => 'Firefox'], // pas de softwares_id du tout
+        ],
+    ]];
+
+    $mercator = linkMercatorMock(mercatorWorkstationsFixture(), mercatorApplicationsFixture());
+    $mercator->shouldReceive('update')
+        ->andReturnUsing(function (string $ep, int $id, array $payload) use (&$updated) {
+            $updated[$id] = $payload;
+
+            return [];
+        });
+
+    (new GlpiSyncService())->syncLinks(linkGlpiMock($computers), $mercator);
+
+    expect($updated[10]['applications'])->toBe([20]);
+});
+
+it('appelle getItem(Computer) avec expand_dropdowns=0 et with_softwares=1', function () {
+    $computer = ['id' => 42, 'name' => 'PC-DIDIER-01', 'softwares' => []];
+
+    $glpi = Mockery::mock(GlpiClientInterface::class);
+    $glpi->shouldReceive('getItems')->with('Computer', Mockery::type('array'))->andReturn([['id' => 42, 'name' => 'PC-DIDIER-01']]);
+    $glpi->shouldReceive('getItem')
+        ->with('Computer', 42, ['with_softwares' => 1, 'expand_dropdowns' => 0])
+        ->once()
+        ->andReturn($computer);
+
+    $mercator = linkMercatorMock(mercatorWorkstationsFixture(), mercatorApplicationsFixture());
+    $mercator->shouldReceive('update')->andReturn([])->zeroOrMoreTimes();
+
+    (new GlpiSyncService())->syncLinks($glpi, $mercator);
+});
+
+it('le payload PUT ne contient que name et applications', function () {
+    $updated = [];
+
+    $mercator = linkMercatorMock(mercatorWorkstationsFixture(), mercatorApplicationsFixture());
+    $mercator->shouldReceive('update')
+        ->andReturnUsing(function (string $ep, int $id, array $payload) use (&$updated) {
+            $updated[$id] = $payload;
+
+            return [];
+        });
+
+    $computers = [['id' => 42, 'name' => 'PC-DIDIER-01', 'softwares' => [['softwares_id' => 'Firefox']]]];
+
+    (new GlpiSyncService())->syncLinks(linkGlpiMock($computers), $mercator);
+
+    expect(array_keys($updated[10]))->toEqualCanonicalizing(['name', 'applications']);
+});
+
+it('compte une erreur PUT et continue pour les workstations suivantes', function () {
+    $updated = [];
+
+    $computers = [
+        ['id' => 42, 'name' => 'PC-DIDIER-01', 'softwares' => [['softwares_id' => 'Firefox']]],
+        ['id' => 43, 'name' => 'PC-NOUVEAU-01', 'softwares' => [['softwares_id' => 'Firefox']]],
+    ];
+
+    $mercator = linkMercatorMock(wsWithNewPC(), mercatorApplicationsFixture());
+    $mercator->shouldReceive('update')
+        ->andReturnUsing(function (string $ep, int $id, array $payload) use (&$updated) {
+            if ($id === 10) {
+                throw new RuntimeException('boom');
+            }
+            $updated[$id] = $payload;
+
+            return [];
+        });
+
+    $stats = (new GlpiSyncService())->syncLinks(linkGlpiMock($computers), $mercator);
+
+    expect($stats['errors'])->toBe(1);
+    expect($stats['updated'])->toBe(1);
+    expect($updated[13]['applications'])->toContain(20);
 });
