@@ -22,7 +22,7 @@ class GlpiSyncService
      * Software : le statut n'existe qu'au niveau SoftwareVersion, non synchronisé
      * (cf. issue #12).
      */
-    private const STATELESS_ITEM_TYPES = ['Location', 'Domain', 'Software'];
+    private const STATELESS_ITEM_TYPES = ['Location', 'Domain', 'Software', 'Database'];
 
     /**
      * Synchronise un type d'item GLPI vers Mercator.
