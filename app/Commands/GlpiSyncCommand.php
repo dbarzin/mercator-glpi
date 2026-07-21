@@ -8,6 +8,7 @@ use App\Services\Glpi\Handlers\ApplicationSyncHandler;
 use App\Services\Glpi\Handlers\ApplianceSyncHandler;
 use App\Services\Glpi\Handlers\CertificateSyncHandler;
 use App\Services\Glpi\Handlers\ClusterSyncHandler;
+use App\Services\Glpi\Handlers\DatabaseSyncHandler;
 use App\Services\Glpi\Handlers\DomainSyncHandler;
 use App\Services\Glpi\Handlers\LocationSyncHandler;
 use App\Services\Glpi\Handlers\LogicalServerSyncHandler;
@@ -54,6 +55,7 @@ class GlpiSyncCommand extends Command
         'certificates'               => CertificateSyncHandler::class,
         'clusters'                   => ClusterSyncHandler::class,
         'domains'                    => DomainSyncHandler::class,
+        'databases'                    => DatabaseSyncHandler::class,
     ];
 
     public function handle(
