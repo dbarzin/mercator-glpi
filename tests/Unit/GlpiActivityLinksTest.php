@@ -6,6 +6,14 @@ use App\Services\Mercator\Contracts\MercatorClientInterface;
 use Mockery\MockInterface;
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
+// GLPI n'expose pas _items sur Appliance (aucun paramètre "with_items" reconnu par
+// l'API, vérifié contre une instance réelle — cf. GlpiSyncService::fetchApplianceLinkedItems()).
+// Les logiciels liés ne sont accessibles que via le pivot Appliance_Item
+// (/Appliance/{id}/Appliance_Item), qui ne porte que items_id (numérique) et
+// itemtype — jamais le nom du logiciel. Le mock reflète ce format ; chaque
+// appliance de fixture porte donc 'software' => [['items_id' => int, 'name' => ?string], ...],
+// 'name' n'étant utilisé que pour simuler la réponse du getItem('Software', id) de
+// repli (déclenché seulement si le matching par ext_refs échoue).
 
 function activityLinksGlpiMock(array $appliances): MockInterface
 {
@@ -16,9 +24,30 @@ function activityLinksGlpiMock(array $appliances): MockInterface
         ->andReturn(array_map(fn ($a) => ['id' => $a['id'], 'name' => $a['name']], $appliances));
 
     foreach ($appliances as $appliance) {
-        $mock->shouldReceive('getItem')
-            ->with('Appliance', $appliance['id'], Mockery::type('array'))
-            ->andReturn($appliance);
+        $softwareLinks = $appliance['software'] ?? [];
+
+        $pivotRows = [];
+        foreach ($softwareLinks as $i => $sw) {
+            $pivotRows[] = [
+                'id' => ($appliance['id'] * 1000) + $i,
+                'appliances_id' => $appliance['id'],
+                'items_id' => $sw['items_id'] ?? null,
+                'itemtype' => 'Software',
+            ];
+        }
+
+        $mock->shouldReceive('getSubItems')
+            ->with('Appliance', $appliance['id'], 'Appliance_Item', Mockery::type('array'))
+            ->andReturn($pivotRows);
+
+        foreach ($softwareLinks as $sw) {
+            if (isset($sw['items_id'], $sw['name'])) {
+                $mock->shouldReceive('getItem')
+                    ->with('Software', $sw['items_id'])
+                    ->zeroOrMoreTimes()
+                    ->andReturn(['id' => $sw['items_id'], 'name' => $sw['name']]);
+            }
+        }
     }
 
     return $mock;
@@ -33,7 +62,8 @@ function activityLinksMercatorMock(array $activities, array $applications): Mock
     return $mock;
 }
 
-// Données de test
+// Données de test — parc non tagué ext_refs (scénario le plus courant : premier
+// sync après migration), résolution par nom via le repli getItem().
 
 function testAppliances(): array
 {
@@ -41,20 +71,16 @@ function testAppliances(): array
         [
             'id' => 1,
             'name' => 'ERP-PRODUCTION',
-            '_items' => [
-                'Software' => [
-                    ['id' => 10, 'name' => 'LibreOffice'],
-                    ['id' => 11, 'name' => 'Firefox'],
-                ],
+            'software' => [
+                ['items_id' => 10, 'name' => 'LibreOffice'],
+                ['items_id' => 11, 'name' => 'Firefox'],
             ],
         ],
         [
             'id' => 2,
             'name' => 'INFRA-RÉSEAU',
-            '_items' => [
-                'Software' => [
-                    ['id' => 12, 'name' => 'Firefox'],
-                ],
+            'software' => [
+                ['items_id' => 12, 'name' => 'Firefox'],
             ],
         ],
     ];
@@ -129,8 +155,8 @@ it('déduplique les activités pour un même logiciel', function () {
 
     // Deux appliances utilisent Firefox, toutes deux mappées sur la même activité
     $appliances = [
-        ['id' => 1, 'name' => 'ERP-PRODUCTION', '_items' => ['Software' => [['id' => 11, 'name' => 'Firefox']]]],
-        ['id' => 2, 'name' => 'ERP-PRODUCTION', '_items' => ['Software' => [['id' => 11, 'name' => 'Firefox']]]],
+        ['id' => 1, 'name' => 'ERP-PRODUCTION', 'software' => [['items_id' => 11, 'name' => 'Firefox']]],
+        ['id' => 2, 'name' => 'ERP-PRODUCTION', 'software' => [['items_id' => 11, 'name' => 'Firefox']]],
     ];
     $activities = [['id' => 100, 'name' => 'ERP-PRODUCTION']];
 
@@ -153,7 +179,7 @@ it('déduplique les activités pour un même logiciel', function () {
 
 it('compte comme skipped les appliances sans activité Mercator correspondante', function () {
     $appliances = [
-        ['id' => 99, 'name' => 'APPLIANCE-INCONNUE', '_items' => ['Software' => [['id' => 5, 'name' => 'Firefox']]]],
+        ['id' => 99, 'name' => 'APPLIANCE-INCONNUE', 'software' => [['items_id' => 5, 'name' => 'Firefox']]],
     ];
 
     $mercator = activityLinksMercatorMock(testActivities(), testApplications());
@@ -199,7 +225,7 @@ it('matche l\'appliance à son activité via ext_refs même si l\'activité a é
     $updated = [];
 
     $appliances = [
-        ['id' => 7, 'name' => 'ERP-PRODUCTION', '_items' => ['Software' => [['id' => 10, 'name' => 'LibreOffice']]]],
+        ['id' => 7, 'name' => 'ERP-PRODUCTION', 'software' => [['items_id' => 10, 'name' => 'LibreOffice']]],
     ];
     // L'activité Mercator a un nom différent de l'appliance GLPI, mais est taguée {GLPI}7
     $activities = [['id' => 100, 'name' => 'Nom renommé côté Mercator', 'ext_refs' => '{GLPI}7']];
@@ -221,15 +247,18 @@ it('matche l\'appliance à son activité via ext_refs même si l\'activité a é
     expect($updated[20]['activities'])->toContain(100);
 });
 
-it('matche le Software à son application via ext_refs même si l\'application a été renommée côté Mercator', function () {
+it('matche le Software à son application via ext_refs (sans appel getItem complémentaire) même si l\'application a été renommée côté Mercator', function () {
     $updated = [];
 
     $appliances = [
-        ['id' => 1, 'name' => 'ERP-PRODUCTION', '_items' => ['Software' => [['id' => 99, 'name' => 'Nom GLPI du logiciel']]]],
+        ['id' => 1, 'name' => 'ERP-PRODUCTION', 'software' => [['items_id' => 99, 'name' => null]]],
     ];
     $activities = [['id' => 100, 'name' => 'ERP-PRODUCTION']];
     // L'application Mercator a un nom différent du Software GLPI, mais est taguée {GLPI}99
     $applications = [['id' => 20, 'name' => 'Nom renommé côté Mercator', 'ext_refs' => '{GLPI}99']];
+
+    $glpi = activityLinksGlpiMock($appliances);
+    $glpi->shouldNotReceive('getItem'); // le matching ext_refs doit suffire, pas de repli par nom
 
     $mercator = activityLinksMercatorMock($activities, $applications);
     $mercator->shouldReceive('update')
@@ -239,10 +268,7 @@ it('matche le Software à son application via ext_refs même si l\'application a
             return [];
         });
 
-    (new GlpiSyncService)->syncActivityLinks(
-        activityLinksGlpiMock($appliances),
-        $mercator,
-    );
+    (new GlpiSyncService)->syncActivityLinks($glpi, $mercator);
 
     expect($updated[20]['activities'])->toContain(100);
 });
@@ -251,8 +277,8 @@ it('distingue deux Software GLPI homonymes via ext_refs (le matching par nom aur
     $updated = [];
 
     $appliances = [
-        ['id' => 1, 'name' => 'Appliance-A', '_items' => ['Software' => [['id' => 10, 'name' => 'MonLogiciel']]]],
-        ['id' => 2, 'name' => 'Appliance-B', '_items' => ['Software' => [['id' => 11, 'name' => 'MonLogiciel']]]],
+        ['id' => 1, 'name' => 'Appliance-A', 'software' => [['items_id' => 10, 'name' => null]]],
+        ['id' => 2, 'name' => 'Appliance-B', 'software' => [['items_id' => 11, 'name' => null]]],
     ];
     $activities = [
         ['id' => 100, 'name' => 'Appliance-A'],
@@ -301,27 +327,18 @@ it('retombe sur le matching par nom quand activités et applications ne sont pas
     expect($updated[21]['activities'])->toContain(100)->toContain(101);
 });
 
-it('retombe sur le nom sans planter quand _items[Software] ne contient pas d\'id', function () {
-    $updated = [];
-
+it('ignore une ligne pivot Software sans items_id numérique, sans planter', function () {
     $appliances = [
-        ['id' => 1, 'name' => 'ERP-PRODUCTION', '_items' => ['Software' => [['name' => 'LibreOffice']]]],
+        ['id' => 1, 'name' => 'ERP-PRODUCTION', 'software' => [['items_id' => null, 'name' => null]]],
     ];
-    $activities = [['id' => 100, 'name' => 'ERP-PRODUCTION']];
-    $applications = [['id' => 20, 'name' => 'LibreOffice']];
 
-    $mercator = activityLinksMercatorMock($activities, $applications);
-    $mercator->shouldReceive('update')
-        ->andReturnUsing(function (string $ep, int $id, array $payload) use (&$updated) {
-            $updated[$id] = $payload;
+    $mercator = activityLinksMercatorMock(testActivities(), testApplications());
+    $mercator->shouldReceive('update')->andReturn([])->zeroOrMoreTimes();
 
-            return [];
-        });
-
-    (new GlpiSyncService)->syncActivityLinks(
+    $stats = (new GlpiSyncService)->syncActivityLinks(
         activityLinksGlpiMock($appliances),
         $mercator,
     );
 
-    expect($updated[20]['activities'])->toContain(100);
+    expect($stats['errors'])->toBe(0);
 });

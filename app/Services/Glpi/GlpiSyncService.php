@@ -501,9 +501,10 @@ class GlpiSyncService
     /**
      * Synchronise les liens activité↔application depuis GLPI vers Mercator.
      *
-     * Chaque Appliance GLPI est récupérée individuellement avec with_items=1.
-     * Les logiciels liés (Software) sont mis en correspondance avec les
-     * Application Mercator. La mise à jour passe par le côté Application
+     * Chaque Appliance GLPI est interrogée individuellement via le pivot
+     * Appliance_Item (cf. fetchApplianceLinkedItems() — with_items n'existe pas
+     * côté API GLPI). Les logiciels liés (Software) sont mis en correspondance avec
+     * les Application Mercator. La mise à jour passe par le côté Application
      * (ApplicationController.update → activities()->sync([...])).
      *
      * Réconciliation appliance↔activité et software↔application via ext_refs
@@ -543,7 +544,7 @@ class GlpiSyncService
 
         // ── 3. Construire le map application_mercator_id → [activity_ids] ─────
         // Pour chaque Appliance, on récupère individuellement ses Software liés
-        // (with_items=1 n'est pas garanti sur les requêtes de liste).
+        // via le pivot Appliance_Item (cf. fetchApplianceLinkedItems()).
 
         $appToActivities = []; // application_mercator_id → [activity_id, ...]
         $appNames = []; // application_mercator_id → name (pour le payload)
@@ -562,37 +563,19 @@ class GlpiSyncService
                 continue;
             }
 
-            $detail = $glpi->getItem('Appliance', $appliance['id'], [
-                'with_items' => 1,
-                'expand_dropdowns' => 1,
-            ]);
-            $softwareItems = $detail['_items']['Software'] ?? [];
+            $softwarePivotRows = $this->fetchApplianceLinkedItems($glpi, (int) $appliance['id'], 'Software');
 
-            if (empty($softwareItems)) {
+            if (empty($softwarePivotRows)) {
                 Log::debug("[activity_links] Appliance sans logiciels liés : {$appliance['name']}");
 
                 continue;
             }
 
-            foreach ($softwareItems as $sw) {
-                $key = $this->resolveItemsEntryKey($sw);
-
-                $app = $key['id'] !== null
-                    ? ($appIndex['byGlpiId'][(string) $key['id']] ?? null)
-                    : null;
-
-                if ($app !== null) {
-                    Log::debug("[activity_links] Software #{$key['id']} résolu via ext_refs {GLPI}{$key['id']}");
-                } elseif ($key['name'] !== null) {
-                    $app = $appIndex['byName'][$key['name']] ?? null;
-
-                    if ($app !== null) {
-                        Log::debug("[activity_links] Software résolu via nom : {$key['name']}");
-                    }
-                }
+            foreach ($softwarePivotRows as $pivotRow) {
+                $app = $this->resolveLinkedItemMatch($glpi, $appIndex, 'Software', $pivotRow, '[activity_links]');
 
                 if ($app === null) {
-                    Log::debug("[activity_links] Logiciel lié à l'appliance {$appliance['name']} sans application Mercator correspondante (id=".($key['id'] ?? '?').', name='.($key['name'] ?? '?').')');
+                    Log::debug('[activity_links] Logiciel (items_id='.($pivotRow['items_id'] ?? '?').") lié à l'appliance {$appliance['name']} sans application Mercator correspondante");
 
                     continue;
                 }
@@ -695,13 +678,9 @@ class GlpiSyncService
                 continue;
             }
 
-            $detail = $glpi->getItem('Appliance', $appliance['id'], [
-                'with_items' => 1,
-                'expand_dropdowns' => 1,
-            ]);
-            $computerItems = $detail['_items']['Computer'] ?? [];
+            $computerPivotRows = $this->fetchApplianceLinkedItems($glpi, (int) $appliance['id'], 'Computer');
 
-            if (empty($computerItems)) {
+            if (empty($computerPivotRows)) {
                 Log::debug("[appliance_links] Appliance sans Computer lié : {$appliance['name']}");
 
                 continue;
@@ -709,26 +688,11 @@ class GlpiSyncService
 
             $logicalServerIds = [];
 
-            foreach ($computerItems as $computerEntry) {
-                $key = $this->resolveItemsEntryKey($computerEntry);
-
-                $ls = $key['id'] !== null
-                    ? ($lsIndex['byGlpiId'][(string) $key['id']] ?? null)
-                    : null;
-
-                if ($ls !== null) {
-                    Log::debug("[appliance_links] Computer #{$key['id']} résolu via ext_refs {GLPI}{$key['id']}");
-                } elseif ($key['name'] !== null) {
-                    $ls = $lsIndex['byName'][$key['name']] ?? null;
-
-                    if ($ls !== null) {
-                        Log::debug("[appliance_links] Computer résolu via nom : {$key['name']}");
-                    }
-                }
+            foreach ($computerPivotRows as $pivotRow) {
+                $ls = $this->resolveLinkedItemMatch($glpi, $lsIndex, 'Computer', $pivotRow, '[appliance_links]');
 
                 if ($ls === null) {
-                    $identifier = $key['id'] !== null ? "#{$key['id']}" : ($key['name'] ?? '?');
-                    Log::debug("[appliance_links] Computer {$identifier} lié à l'appliance {$appliance['name']} sans serveur logique Mercator correspondant");
+                    Log::debug('[appliance_links] Computer (items_id='.($pivotRow['items_id'] ?? '?').") lié à l'appliance {$appliance['name']} sans serveur logique Mercator correspondant");
 
                     continue;
                 }
@@ -906,31 +870,94 @@ class GlpiSyncService
     }
 
     /**
-     * Résout la clé de correspondance (id GLPI ou nom) d'une entrée _items[<Itemtype>]
-     * de detail Appliance (with_items=1). GLPI peut renvoyer soit l'item sérialisé
-     * (avec un 'id' numérique et un 'name'), soit — selon les versions/itemtypes —
-     * une ligne pivot Appliance_Item ('items_id', 'itemtype') sans 'id' propre : les
-     * deux formes sont gérées défensivement, priorité à l'id numérique. Conçue pour
-     * être réutilisable au-delà de Computer/Software (physical servers, databases,
-     * clusters — non implémenté dans cette itération).
+     * Récupère les items GLPI (Computer, Software…) liés à une Appliance pour un
+     * itemtype donné, via le pivot Appliance_Item.
      *
-     * @return array{id: ?int, name: ?string}
+     * ⚠️ GLPI n'implémente PAS de paramètre "with_items" sur Appliance : quelle que
+     * soit la valeur envoyée, la réponse ne contient jamais de clé `_items` (vérifié
+     * contre une instance GLPI 11.0.8 réelle — seuls with_softwares, with_devices,
+     * with_disks, with_networkports, with_infocoms, with_contracts… sont reconnus,
+     * cf. Glpi\Api\API::getItem()). Les éléments liés à une Appliance ne sont donc
+     * accessibles que via ce sous-endpoint `/Appliance/{id}/Appliance_Item`, qui
+     * renvoie des lignes pivot (id du pivot, appliances_id, items_id, itemtype) —
+     * jamais le nom de l'item lié.
+     *
+     * expand_dropdowns=0 est requis pour que items_id/appliances_id restent des ids
+     * numériques (cf. buildItemRackMap()/Item_Rack, issue #8) : avec la valeur par
+     * défaut (1), GLPI remplace items_id par le NOM de l'item lié, ce qui casse tout
+     * matching par id (et, plus grave, fait passer silencieusement à côté du lien
+     * réel — cf. issue #12, rapport "Appliance sans Computer lié" alors que le lien
+     * existe bien côté GLPI).
+     *
+     * Conçu pour être réutilisable au-delà de Computer/Software (physical servers,
+     * databases, clusters — non implémenté dans cette itération) : il suffit de
+     * changer $itemType.
+     *
+     * @return array<int, array{id: int, appliances_id: int, items_id: int, itemtype: string}>
      */
-    private function resolveItemsEntryKey(array $entry): array
+    private function fetchApplianceLinkedItems(GlpiClientInterface $glpi, int $applianceId, string $itemType): array
     {
-        $id = null;
-        if (isset($entry['id']) && is_numeric($entry['id'])) {
-            $id = (int) $entry['id'];
-        } elseif (isset($entry['items_id']) && is_numeric($entry['items_id'])) {
-            $id = (int) $entry['items_id'];
+        $pivotRows = $glpi->getSubItems('Appliance', $applianceId, 'Appliance_Item', [
+            'range' => '0-999',
+            'expand_dropdowns' => 0,
+        ]);
+
+        Log::debug("[Appliance/{$applianceId}] Appliance_Item : ".count($pivotRows).' ligne(s) pivot reçue(s) au total, filtre itemtype='.$itemType);
+
+        return array_values(array_filter(
+            $pivotRows,
+            fn ($row) => ($row['itemtype'] ?? null) === $itemType
+        ));
+    }
+
+    /**
+     * Résout la correspondance Mercator d'un item lié via pivot Appliance_Item : id
+     * GLPI numérique (items_id) en priorité, nom en repli. Le pivot ne portant jamais
+     * le nom de l'item lié (cf. fetchApplianceLinkedItems()), le nom n'est récupéré
+     * par un appel GLPI complémentaire ($glpi->getItem()) que si la résolution par id
+     * a échoué — pour ne payer ce coût que sur un parc pas encore tagué ext_refs.
+     */
+    private function resolveLinkedItemMatch(
+        GlpiClientInterface $glpi,
+        array $index,
+        string $itemType,
+        array $pivotRow,
+        string $logPrefix,
+    ): ?array {
+        $itemsId = $pivotRow['items_id'] ?? null;
+
+        if (! is_numeric($itemsId)) {
+            Log::debug("{$logPrefix} Ligne pivot {$itemType} sans items_id numérique exploitable");
+
+            return null;
         }
 
-        $name = null;
-        if (isset($entry['name']) && trim((string) $entry['name']) !== '') {
-            $name = strtolower(trim((string) $entry['name']));
+        $itemsId = (int) $itemsId;
+
+        $match = $index['byGlpiId'][(string) $itemsId] ?? null;
+
+        if ($match !== null) {
+            Log::debug("{$logPrefix} {$itemType} #{$itemsId} résolu via ext_refs {GLPI}{$itemsId}");
+
+            return $match;
         }
 
-        return ['id' => $id, 'name' => $name];
+        $detail = $glpi->getItem($itemType, $itemsId);
+        $name = isset($detail['name']) ? strtolower(trim((string) $detail['name'])) : null;
+
+        if ($name === null || $name === '') {
+            Log::debug("{$logPrefix} {$itemType} #{$itemsId} : pas de correspondance ext_refs et nom introuvable (repli par nom impossible)");
+
+            return null;
+        }
+
+        $match = $index['byName'][$name] ?? null;
+
+        if ($match !== null) {
+            Log::debug("{$logPrefix} {$itemType} #{$itemsId} résolu via nom : {$name}");
+        }
+
+        return $match;
     }
 
     // -------------------------------------------------------------------------
