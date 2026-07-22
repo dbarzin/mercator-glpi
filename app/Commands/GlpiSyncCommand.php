@@ -4,8 +4,8 @@ namespace App\Commands;
 
 use App\Services\Glpi\Contracts\GlpiClientInterface;
 use App\Services\Glpi\GlpiSyncService;
-use App\Services\Glpi\Handlers\ApplicationSyncHandler;
 use App\Services\Glpi\Handlers\ApplianceSyncHandler;
+use App\Services\Glpi\Handlers\ApplicationSyncHandler;
 use App\Services\Glpi\Handlers\CertificateSyncHandler;
 use App\Services\Glpi\Handlers\ClusterSyncHandler;
 use App\Services\Glpi\Handlers\DatabaseSyncHandler;
@@ -23,7 +23,9 @@ use App\Services\Glpi\Handlers\SiteSyncHandler;
 use App\Services\Glpi\Handlers\StorageDeviceSyncHandler;
 use App\Services\Glpi\Handlers\WifiTerminalSyncHandler;
 use App\Services\Glpi\Handlers\WorkstationSyncHandler;
+use App\Services\Glpi\VmLinkSyncService;
 use App\Services\Mercator\Contracts\MercatorClientInterface;
+use Illuminate\Support\Facades\Log;
 use LaravelZero\Framework\Commands\Command;
 use Throwable;
 
@@ -37,34 +39,35 @@ class GlpiSyncCommand extends Command
     protected $description = 'Synchronise les assets GLPI vers Mercator';
 
     private array $handlers = [
-        'workstations'               => WorkstationSyncHandler::class,
-        'applications'               => ApplicationSyncHandler::class,
-        'peripherals'                => PeripheralSyncHandler::class,
-        'phones'                     => PhoneSyncHandler::class,
-        'network_devices'            => NetworkDeviceSyncHandler::class,
-        'routers'                    => RouterSyncHandler::class,
-        'wifi_terminals'             => WifiTerminalSyncHandler::class,
-        'physical_security_devices'  => PhysicalSecurityDeviceSyncHandler::class,
-        'storage_devices'            => StorageDeviceSyncHandler::class,
-        'racks'                      => RackSyncHandler::class,
-        'appliances'                 => ApplianceSyncHandler::class,
-        'sites'                      => SiteSyncHandler::class,
-        'locations'                  => LocationSyncHandler::class,
-        'logical_servers'            => LogicalServerSyncHandler::class,
-        'physical_servers'           => PhysicalServerSyncHandler::class,
-        'certificates'               => CertificateSyncHandler::class,
-        'clusters'                   => ClusterSyncHandler::class,
-        'domains'                    => DomainSyncHandler::class,
-        'databases'                    => DatabaseSyncHandler::class,
+        'workstations' => WorkstationSyncHandler::class,
+        'applications' => ApplicationSyncHandler::class,
+        'peripherals' => PeripheralSyncHandler::class,
+        'phones' => PhoneSyncHandler::class,
+        'network_devices' => NetworkDeviceSyncHandler::class,
+        'routers' => RouterSyncHandler::class,
+        'wifi_terminals' => WifiTerminalSyncHandler::class,
+        'physical_security_devices' => PhysicalSecurityDeviceSyncHandler::class,
+        'storage_devices' => StorageDeviceSyncHandler::class,
+        'racks' => RackSyncHandler::class,
+        'appliances' => ApplianceSyncHandler::class,
+        'sites' => SiteSyncHandler::class,
+        'locations' => LocationSyncHandler::class,
+        'logical_servers' => LogicalServerSyncHandler::class,
+        'physical_servers' => PhysicalServerSyncHandler::class,
+        'certificates' => CertificateSyncHandler::class,
+        'clusters' => ClusterSyncHandler::class,
+        'domains' => DomainSyncHandler::class,
+        'databases' => DatabaseSyncHandler::class,
     ];
 
     public function handle(
-        GlpiClientInterface     $glpi,
+        GlpiClientInterface $glpi,
         MercatorClientInterface $mercator,
-        GlpiSyncService         $syncService,
+        GlpiSyncService $syncService,
+        VmLinkSyncService $vmLinkSyncService,
     ): int {
         $dryRun = $this->option('dry-run') || config('glpi.sync.dry_run');
-        $start  = microtime(true);
+        $start = microtime(true);
 
         $this->line('');
         $this->line('<fg=cyan>╔══════════════════════════════════════╗</>');
@@ -99,7 +102,7 @@ class GlpiSyncCommand extends Command
             $mercator->authenticate();
             $this->line('  <fg=green>✔ Mercator connecté</>');
         } catch (Throwable $e) {
-            $this->error('Échec de l\'authentification : ' . $e->getMessage());
+            $this->error('Échec de l\'authentification : '.$e->getMessage());
 
             return self::FAILURE;
         }
@@ -150,12 +153,13 @@ class GlpiSyncCommand extends Command
                         $linkStats['errors'],
                     ));
                     $globalStats['updated'] += $linkStats['updated'];
-                    $globalStats['errors']  += $linkStats['errors'];
+                    $globalStats['errors'] += $linkStats['errors'];
                 } catch (Throwable $e) {
-                    $this->error('  Erreur lors de la sync links : ' . $e->getMessage());
+                    $this->error('  Erreur lors de la sync links : '.$e->getMessage());
                     $globalStats['errors']++;
                 }
                 $this->line('');
+
                 continue;
             }
 
@@ -170,12 +174,13 @@ class GlpiSyncCommand extends Command
                         $linkStats['errors'],
                     ));
                     $globalStats['updated'] += $linkStats['updated'];
-                    $globalStats['errors']  += $linkStats['errors'];
+                    $globalStats['errors'] += $linkStats['errors'];
                 } catch (Throwable $e) {
-                    $this->error('  Erreur lors de la sync activity_links : ' . $e->getMessage());
+                    $this->error('  Erreur lors de la sync activity_links : '.$e->getMessage());
                     $globalStats['errors']++;
                 }
                 $this->line('');
+
                 continue;
             }
 
@@ -190,17 +195,19 @@ class GlpiSyncCommand extends Command
                         $linkStats['errors'],
                     ));
                     $globalStats['updated'] += $linkStats['updated'];
-                    $globalStats['errors']  += $linkStats['errors'];
+                    $globalStats['errors'] += $linkStats['errors'];
                 } catch (Throwable $e) {
-                    $this->error('  Erreur lors de la sync appliance_links : ' . $e->getMessage());
+                    $this->error('  Erreur lors de la sync appliance_links : '.$e->getMessage());
                     $globalStats['errors']++;
                 }
                 $this->line('');
+
                 continue;
             }
 
             if (! isset($this->handlers[$type])) {
                 $this->warn("  Type inconnu ou non actif : {$type}");
+
                 continue;
             }
 
@@ -212,17 +219,46 @@ class GlpiSyncCommand extends Command
                 $stats = $syncService->sync($glpi, $mercator, $handler, $dryRun);
 
                 if ($stats['endpoint_missing'] ?? false) {
-                    $this->warn("  Endpoint non disponible dans Mercator — type ignoré");
+                    $this->warn('  Endpoint non disponible dans Mercator — type ignoré');
                 } else {
                     $this->printStats($stats);
                     $this->mergeStats($globalStats, $stats);
                 }
             } catch (Throwable $e) {
-                $this->error("  Erreur lors de la sync {$type} : " . $e->getMessage());
+                $this->error("  Erreur lors de la sync {$type} : ".$e->getMessage());
                 $globalStats['errors']++;
             }
 
             $this->line('');
+        }
+
+        // ── Liens VM → serveur physique (opt-in, GLPI_SYNC_VM_LINKS) ─────────
+        // Nécessite que logical_servers ET physical_servers aient été traités dans
+        // ce run (résolution ext_refs des deux côtés) : ni un SyncHandler ni un
+        // --type sélectionnable, la synchronisation est purement config-gated.
+
+        if (config('glpi.sync.vm_links')) {
+            if (in_array('logical_servers', $types, true) && in_array('physical_servers', $types, true)) {
+                $this->line('  <fg=cyan>─── vm_links ───</>');
+                try {
+                    $vmStats = $vmLinkSyncService->sync($glpi, $mercator, $dryRun);
+                    $this->line(sprintf(
+                        '  <fg=yellow>~%d mis à jour</>  <fg=gray>%d ignorés</>  <fg=yellow>%d ambigus</>  <fg=red>%d erreurs</>',
+                        $vmStats['updated'],
+                        $vmStats['skipped'],
+                        $vmStats['ambiguous'],
+                        $vmStats['errors'],
+                    ));
+                    $globalStats['updated'] += $vmStats['updated'];
+                    $globalStats['errors'] += $vmStats['errors'];
+                } catch (Throwable $e) {
+                    $this->error('  Erreur lors de la sync vm_links : '.$e->getMessage());
+                    $globalStats['errors']++;
+                }
+                $this->line('');
+            } else {
+                Log::info('[vm-links] GLPI_SYNC_VM_LINKS=true mais logical_servers et/ou physical_servers non inclus dans ce run — synchronisation des liens VM ignorée');
+            }
         }
 
         // ── Fermeture session GLPI ───────────────────────────────────────────

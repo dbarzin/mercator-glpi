@@ -25,6 +25,7 @@
 - [Types d'actifs synchronisés](#types-dactifs-synchronisés)
   - [Tableau de correspondance GLPI → Mercator](#tableau-de-correspondance-glpi--mercator)
   - [Détail des champs par type](#détail-des-champs-par-type)
+  - [Liens VM ↔ serveur physique](#liens-serveur-logique-vm--serveur-physique-glpi_sync_vm_links)
 - [Filtrage des actifs](#filtrage-des-actifs)
   - [Par entité GLPI](#par-entité-glpi)
   - [Par statut](#par-statut)
@@ -80,6 +81,8 @@ GlpiSyncService              — Orchestration : récupération, filtrage, créa
   ├── syncActivityLinks()     — Liens activité ↔ application (via pivot Appliance_Item, itemtype=Software)
   ├── syncApplianceLinks()    — Liens application ↔ serveur logique (via pivot Appliance_Item, itemtype=Computer, mode applications)
   └── Mapper                  — Transformation champ à champ GLPI → Mercator
+VmLinkSyncService             — Liens serveur logique (VM) ↔ serveur(s) physique(s) hôte(s)
+                                (opt-in GLPI_SYNC_VM_LINKS, invoqué après logical_servers/physical_servers)
 GlpiClient                   — Client HTTP GLPI (API REST v1, session-token)
 MercatorClient               — Client HTTP Mercator (API REST, Bearer token)
 ```
@@ -186,6 +189,7 @@ Copiez `.env.sample` vers `.env` et renseignez les valeurs :
 | `MERCATOR_LOGIN` | — | Email du compte Mercator utilisé pour l'API                                                                                                                               | `sync@acme.fr`                                         |
 | `MERCATOR_PASSWORD` | — | Mot de passe du compte Mercator                                                                                                                                           | `motdepasse`                                           |
 | `SYNC_DRY_RUN` | `false` | Si `true`, simule sans écrire dans Mercator                                                                                                                               | `true`                                                 |
+| `GLPI_SYNC_VM_LINKS` | `false` | Si `true`, importe les liens serveur logique (VM) ↔ serveur(s) physique(s) hôte(s) (voir [Liens VM ↔ serveur physique](#liens-serveur-logique-vm--serveur-physique-glpi_sync_vm_links)) | `true`                                                 |
 | `LOG_LEVEL` | `info` | Niveau de verbosité des logs (`debug`, `info`, `warning`, `error`)                                                                                                        | `debug`                                                |
 
 ### Configuration côté GLPI
@@ -257,9 +261,12 @@ Certains types doivent être synchronisés avant d'autres pour que les liens et 
 16. links                       → lie les workstations ↔ applications (nécessite 4 et 6)
 17. activity_links               → lie les activities ↔ applications (nécessite 4 et 5)
 18. appliance_links              → lie les applications ↔ serveurs logiques (nécessite 5 en mode applications et 14)
+19. vm_links (GLPI_SYNC_VM_LINKS) → lie les serveurs logiques (VM) ↔ serveurs physiques hôtes (nécessite 14 et 15)
 ```
 
 Cet ordre est appliqué automatiquement lors de la synchronisation complète (`php application glpi:sync`).
+
+`vm_links` n'est **pas** une valeur `--type` sélectionnable : contrairement aux autres étapes ci-dessus, c'est un service distinct (`VmLinkSyncService`), invoqué automatiquement par `GlpiSyncCommand` après la boucle des types, uniquement si `GLPI_SYNC_VM_LINKS=true` **et** que `logical_servers` et `physical_servers` ont tous les deux été synchronisés dans ce run (synchronisation complète, ou `--type=logical_servers --type=physical_servers` explicite). Dans les autres cas (ex. `--type=workstations` seul), l'étape est silencieusement ignorée (log info), sans erreur.
 
 `certificates` et `clusters` ne font **pas** partie de la synchronisation complète par défaut : ils ne sont exécutés que si on les demande explicitement via `--type=certificates` / `--type=clusters`.
 
@@ -315,6 +322,9 @@ php application glpi:sync --type=links --type=activity_links
 php application glpi:sync --dry-run --type=network_devices
 
 # Synchroniser les serveurs logiques et physiques
+php application glpi:sync --type=logical_servers --type=physical_servers
+
+# Rafraîchir les liens VM ↔ serveur physique (GLPI_SYNC_VM_LINKS=true dans .env)
 php application glpi:sync --type=logical_servers --type=physical_servers
 ```
 
@@ -577,6 +587,27 @@ Source GLPI : pivot `Appliance_Item` filtré sur `itemtype=Computer` (ordinateur
 - `logical_servers` doit avoir été synchronisé au préalable : seuls les `Computer` déjà présents comme serveur logique Mercator (routés via `GLPI_COMPUTER_TYPES_LOGICAL_SERVERS`) sont liés. Un `Computer` lié à l'Appliance mais non retenu par ce filtre (ex. simple poste de travail) est ignoré silencieusement (log debug), sans compter comme erreur.
 
 **Remplacement, pas fusion** : le tableau `logical_servers` envoyé à chaque exécution **remplace** la liste des serveurs logiques liés à l'application (comportement standard des champs de relation Mercator, identique à `activities`/`applications` sur `links`/`activity_links`) — un `Computer` retiré de l'Appliance côté GLPI est délié à la synchronisation suivante.
+
+#### Liens serveur logique (VM) ↔ serveur physique (`GLPI_SYNC_VM_LINKS`)
+
+GLPI permet de rattacher une machine virtuelle à l'hyperviseur (Computer physique) qui l'héberge (table `glpi_itemvirtualmachines`, onglet "Virtualisation" d'un Computer). Cette fonctionnalité **opt-in** (désactivée par défaut) importe ces liens vers le pivot `logical_server_physical_server` de Mercator.
+
+```ini
+GLPI_SYNC_VM_LINKS=true
+```
+
+Contrairement à `links`/`activity_links`/`appliance_links`, ce n'est **pas** une valeur `--type` : le service `VmLinkSyncService` est invoqué automatiquement par `glpi:sync` après les types `logical_servers`/`physical_servers`, uniquement si les deux ont été synchronisés dans le run courant (voir [Ordre d'exécution et dépendances](#ordre-dexécution-et-dépendances)).
+
+**Fonctionnement** :
+1. Pour chaque `Computer` routé vers `physical-servers` (`GLPI_COMPUTER_TYPES_PHYSICAL_SERVERS`), les entrées VM de son onglet "Virtualisation" sont récupérées via un sous-endpoint GLPI dédié — `ItemVirtualMachine` en **GLPI 11**, `ComputerVirtualMachine` en **GLPI 10** (le connecteur détecte automatiquement la version au premier appel et mémorise le résultat pour le reste du run). Les entrées marquées supprimées (`is_deleted=1`) sont ignorées.
+2. Chaque entrée VM est mise en correspondance avec un `Computer` routé vers `logical-servers` (`GLPI_COMPUTER_TYPES_LOGICAL_SERVERS`) : par **uuid** en priorité (en tenant compte d'une éventuelle inversion d'endianness des 3 premiers groupes de l'uuid, un écart connu selon l'hyperviseur — GLPI lui-même gère les deux variantes), puis par **nom** (insensible à la casse) en repli. Si plusieurs `Computer` candidats partagent le même nom sans qu'aucun n'ait matché par uuid, aucune liaison n'est faite pour cette VM (ambiguïté journalisée en warning).
+3. Les deux côtés sont ensuite résolus vers leurs enregistrements Mercator via `ext_refs` (`{GLPI}<id>`), puis `PUT logical-servers/{id}` avec `physical_servers: [...]` (IDs Mercator des serveurs physiques hôtes).
+
+**Prérequis** : `logical_servers` et `physical_servers` doivent avoir été synchronisés au préalable (les deux filtres `GLPI_COMPUTER_TYPES_*` correspondants doivent être configurés). Une VM qui existe dans GLPI mais n'est pas un `Computer` routé vers `logical-servers` (ex. simple poste de travail) n'est jamais liée.
+
+> **Remplacement, pas fusion** : `physical_servers` **remplace** la liste des serveurs physiques hôtes à chaque exécution — un lien ajouté manuellement dans Mercator sur un serveur logique déjà synchronisé (tagué `{GLPI}`) sera **écrasé** au run suivant si la fonctionnalité est active. Un serveur logique Mercator qui n'a pas encore été tagué `{GLPI}` (jamais synchronisé par ce connecteur) n'est en revanche jamais modifié.
+>
+> Un serveur logique tagué `{GLPI}` pour lequel aucun hôte n'est (plus) résolu reçoit `physical_servers: []` (nettoyage des liens obsolètes, ex. VM migrée ou débranchée dans GLPI).
 
 ---
 
@@ -903,6 +934,21 @@ LOG_LEVEL=debug php application glpi:sync --type=appliance_links
 grep "\[appliance_links\]" storage/logs/laravel.log
 ```
 
+#### Aucun lien VM ↔ serveur physique créé (`GLPI_SYNC_VM_LINKS`)
+
+Prérequis :
+1. `GLPI_SYNC_VM_LINKS=true`
+2. `logical_servers` et `physical_servers` doivent être synchronisés dans le **même run** (`php application glpi:sync` complet, ou `--type=logical_servers --type=physical_servers` explicite) — sinon l'étape est silencieusement ignorée (log info, pas une erreur)
+3. Les VM doivent être rattachées à leur hôte dans GLPI (onglet "Virtualisation" du Computer hôte)
+4. Les `Computer` hôte et VM doivent être routés respectivement vers `physical-servers`/`logical-servers` via `GLPI_COMPUTER_TYPES_PHYSICAL_SERVERS`/`GLPI_COMPUTER_TYPES_LOGICAL_SERVERS`
+
+```bash
+LOG_LEVEL=debug php application glpi:sync --type=logical_servers --type=physical_servers
+grep "\[vm-links\]" storage/logs/laravel.log
+```
+
+> Un warning `plusieurs Computer serveur logique candidats... ambiguïté` signifie que le repli par nom (uuid absent ou non concluant) a trouvé plusieurs `Computer` candidats homonymes : aucune liaison n'est faite pour cette VM tant que l'ambiguïté existe.
+
 ---
 
 ## Étendre le connecteur
@@ -1003,6 +1049,8 @@ Les tests utilisent **Mockery** — aucun appel réseau réel. Les fixtures JSON
 | `GlpiSyncServiceLocationHierarchyTest` | Résolution `building_id`/`site_id` à travers la hiérarchie Location → Site |
 | `GlpiActivityLinksTest` | Liens activité ↔ application (`syncActivityLinks`), y compris réconciliation par `ext_refs` et homonymes |
 | `GlpiApplianceLinksTest` | Liens application ↔ serveur logique (`syncApplianceLinks`), mode `applications` requis |
+| `VmLinkSyncServiceTest` | Liens serveur logique (VM) ↔ serveur physique : détection GLPI 10/11, résolution uuid (dont endianness inversée) et nom, ambiguïtés, nettoyage |
+| `VmLinksCommandTest` (`tests/Feature/`) | Câblage `GlpiSyncCommand` ↔ `VmLinkSyncService` selon `GLPI_SYNC_VM_LINKS` et les `--type` synchronisés |
 | `GlpiEntityFilterTest` | Filtrage par entité GLPI (`--entity`, `GLPI_ENTITY_ID`) |
 | `GlpiClientPaginationTest` | Pagination automatique de `GlpiClient::getItems()` au-delà de 1000 items (`Content-Range`) |
 | `GlpiStatusFilterTest` | Filtrage par statut (`GLPI_ALLOWED_STATES*`) |

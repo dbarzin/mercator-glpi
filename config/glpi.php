@@ -21,6 +21,8 @@ return [
 
     'sync' => [
         'dry_run' => env('SYNC_DRY_RUN', false),
+        // Import des liens VM (serveur logique) → serveur(s) physique(s) hôte(s) — opt-in
+        'vm_links' => env('GLPI_SYNC_VM_LINKS', false),
     ],
 
     // Filtrage par statut GLPI (states_id) — vide = tous statuts acceptés
