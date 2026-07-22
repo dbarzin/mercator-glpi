@@ -99,7 +99,19 @@ class VmLinkSyncService
         $logicalToPhysical = []; // glpi_id serveur logique → [glpi_id hôte, ...]
 
         foreach ($hosts as $host) {
-            $vmEntries = $this->fetchVmEntries($glpi, (int) $host['id']);
+            // Un hôte dont la récupération des VM échoue (ex: erreur 500 GLPI sur
+            // ComputerVirtualMachine pour ce Computer précis, cf. issue #15) ne doit
+            // pas interrompre le traitement des autres hôtes ni empêcher la
+            // résolution/écriture des liens déjà identifiés : on journalise et on
+            // passe à l'hôte suivant.
+            try {
+                $vmEntries = $this->fetchVmEntries($glpi, (int) $host['id']);
+            } catch (Throwable $e) {
+                $stats['errors']++;
+                Log::error("[vm-links] Erreur lors de la récupération des VM de l'hôte #{$host['id']} (".($host['name'] ?? '?').') : '.$e->getMessage().' — hôte ignoré');
+
+                continue;
+            }
 
             foreach ($vmEntries as $vm) {
                 if ((int) ($vm['is_deleted'] ?? 0) === 1) {

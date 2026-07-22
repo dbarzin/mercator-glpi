@@ -279,6 +279,50 @@ it('ne fait aucune écriture en mode dry-run', function () {
     expect($stats['updated'])->toBe(1);
 });
 
+it('journalise une erreur et poursuit les autres hôtes quand la récupération des VM échoue pour un hôte (issue #15)', function () {
+    Log::spy();
+
+    $host1 = vmHost(1, 'HOST-1'); // ItemVirtualMachine ET ComputerVirtualMachine échouent (ex: erreur 500 GLPI)
+    $host2 = vmHost(2, 'HOST-2');
+    $ls = vmLogicalComputer(10, 'VM-1', 'uuid-c-1111-2222-3333-444444444444');
+
+    $glpi = Mockery::mock(GlpiClientInterface::class);
+    $glpi->shouldReceive('getItems')->with('Computer', Mockery::type('array'))->andReturn([$host1, $host2, $ls]);
+
+    $glpi->shouldReceive('getSubItems')
+        ->once()
+        ->with('Computer', 1, 'ItemVirtualMachine', Mockery::type('array'))
+        ->andThrow(new RuntimeException('Erreur lors de la récupération de Computer/1/ItemVirtualMachine : 400'));
+
+    $glpi->shouldReceive('getSubItems')
+        ->once()
+        ->with('Computer', 1, 'ComputerVirtualMachine', Mockery::type('array'))
+        ->andThrow(new RuntimeException('Erreur lors de la récupération de Computer/1/ComputerVirtualMachine : 500'));
+
+    // L'échec sur l'hôte 1 ne doit pas empêcher la détection/le traitement de l'hôte 2.
+    $glpi->shouldReceive('getSubItems')
+        ->once()
+        ->with('Computer', 2, 'ItemVirtualMachine', Mockery::type('array'))
+        ->andReturn([vmEntry('VM-1', 'uuid-c-1111-2222-3333-444444444444')]);
+
+    $mercator = vmLinksMercatorMock([vmMercatorLs(300, 'VM-1', 10)], [vmMercatorPs(401, 'HOST-2', 2)]);
+
+    $updated = [];
+    $mercator->shouldReceive('update')->andReturnUsing(function (string $ep, int $id, array $payload) use (&$updated) {
+        $updated[$id] = $payload;
+
+        return [];
+    });
+
+    $stats = (new VmLinkSyncService)->sync($glpi, $mercator);
+
+    expect($stats['errors'])->toBe(1);
+    expect($updated[300]['physical_servers'])->toBe([401]);
+    Log::shouldHaveReceived('error')
+        ->withArgs(fn (string $m) => str_contains($m, 'hôte #1') && str_contains($m, 'ignoré'))
+        ->atLeast()->once();
+});
+
 it('gère sans exception un hôte ou un serveur logique GLPI sans correspondance Mercator, et traite quand même les autres liaisons', function () {
     Log::spy();
 

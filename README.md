@@ -605,6 +605,8 @@ Contrairement à `links`/`activity_links`/`appliance_links`, ce n'est **pas** un
 
 **Prérequis** : `logical_servers` et `physical_servers` doivent avoir été synchronisés au préalable (les deux filtres `GLPI_COMPUTER_TYPES_*` correspondants doivent être configurés). Une VM qui existe dans GLPI mais n'est pas un `Computer` routé vers `logical-servers` (ex. simple poste de travail) n'est jamais liée.
 
+Si la récupération des entrées VM échoue pour un hôte précis (ex. erreur 500 GLPI sur `ComputerVirtualMachine` pour ce `Computer`), seul cet hôte est ignoré (erreur journalisée) : les autres hôtes continuent d'être traités et les liens déjà résolus sont tout de même écrits.
+
 > **Remplacement, pas fusion** : `physical_servers` **remplace** la liste des serveurs physiques hôtes à chaque exécution — un lien ajouté manuellement dans Mercator sur un serveur logique déjà synchronisé (tagué `{GLPI}`) sera **écrasé** au run suivant si la fonctionnalité est active. Un serveur logique Mercator qui n'a pas encore été tagué `{GLPI}` (jamais synchronisé par ce connecteur) n'est en revanche jamais modifié.
 >
 > Un serveur logique tagué `{GLPI}` pour lequel aucun hôte n'est (plus) résolu reçoit `physical_servers: []` (nettoyage des liens obsolètes, ex. VM migrée ou débranchée dans GLPI).
