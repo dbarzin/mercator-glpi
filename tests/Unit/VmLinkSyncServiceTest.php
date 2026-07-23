@@ -85,6 +85,12 @@ function vmLinksGlpiMock(array $allComputers, array $vmEntries): MockInterface
         ->with('ItemVirtualMachine', Mockery::type('array'))
         ->andReturn($vmEntries);
 
+    // fetchAllVmEntries() s'exécute sous withoutEntityRestriction() (cf. issue #15,
+    // bug GLPI 10.0.20 "Unknown column ... is_recursive") : no-op ici, on invoque
+    // simplement le callback.
+    $mock->shouldReceive('withoutEntityRestriction')
+        ->andReturnUsing(fn (callable $callback) => $callback());
+
     return $mock;
 }
 
@@ -105,6 +111,7 @@ it('détecte le repli GLPI 10 (ComputerVirtualMachine) après échec de ItemVirt
 
     $glpi = Mockery::mock(GlpiClientInterface::class);
     $glpi->shouldReceive('getItems')->with('Computer', Mockery::type('array'))->andReturn([$host, $ls]);
+    $glpi->shouldReceive('withoutEntityRestriction')->andReturnUsing(fn (callable $callback) => $callback());
 
     $glpi->shouldReceive('getItems')
         ->once()
@@ -135,6 +142,7 @@ it('ne fait qu\'un seul appel pour récupérer les VM, quel que soit le nombre d
 
     $glpi = Mockery::mock(GlpiClientInterface::class);
     $glpi->shouldReceive('getItems')->with('Computer', Mockery::type('array'))->andReturn([$host1, $host2, $ls]);
+    $glpi->shouldReceive('withoutEntityRestriction')->andReturnUsing(fn (callable $callback) => $callback());
 
     // ->once() : si le service faisait encore une requête par hôte, cette
     // expectation échouerait (2 appels constatés au lieu d'1).
@@ -162,6 +170,7 @@ it('propage une exception si ItemVirtualMachine et ComputerVirtualMachine échou
 
     $glpi = Mockery::mock(GlpiClientInterface::class);
     $glpi->shouldReceive('getItems')->with('Computer', Mockery::type('array'))->andReturn([$host]);
+    $glpi->shouldReceive('withoutEntityRestriction')->andReturnUsing(fn (callable $callback) => $callback());
     $glpi->shouldReceive('getItems')
         ->with('ItemVirtualMachine', Mockery::type('array'))
         ->andThrow(new RuntimeException('Erreur lors de la récupération de ItemVirtualMachine : 400'));
@@ -172,6 +181,38 @@ it('propage une exception si ItemVirtualMachine et ComputerVirtualMachine échou
     $mercator = vmLinksMercatorMock([], []);
 
     expect(fn () => (new VmLinkSyncService)->sync($glpi, $mercator))->toThrow(RuntimeException::class);
+});
+
+it('récupère les entrées VM via withoutEntityRestriction (issue #15, bug GLPI 10.0.20 "Unknown column ... is_recursive")', function () {
+    $host = vmHost(1, 'HOST-1');
+    $ls = vmLogicalComputer(10, 'VM-1', 'uuid-d-1111-2222-3333-444444444444');
+
+    $glpi = Mockery::mock(GlpiClientInterface::class);
+    $glpi->shouldReceive('getItems')->with('Computer', Mockery::type('array'))->andReturn([$host, $ls]);
+
+    // ->once() : si le service appelait getItems('ComputerVirtualMachine', ...) en
+    // dehors de withoutEntityRestriction(), cette expectation ne serait jamais
+    // exercée (RuntimeException "no matching handler" à l'exécution du test).
+    $glpi->shouldReceive('withoutEntityRestriction')
+        ->once()
+        ->andReturnUsing(fn (callable $callback) => $callback());
+
+    $glpi->shouldReceive('getItems')
+        ->with('ItemVirtualMachine', Mockery::type('array'))
+        ->andReturn([vmEntry(1, 'VM-1', 'uuid-d-1111-2222-3333-444444444444')]);
+
+    $mercator = vmLinksMercatorMock([vmMercatorLs(300, 'VM-1', 10)], [vmMercatorPs(400, 'HOST-1', 1)]);
+
+    $updated = [];
+    $mercator->shouldReceive('update')->andReturnUsing(function (string $ep, int $id, array $payload) use (&$updated) {
+        $updated[$id] = $payload;
+
+        return [];
+    });
+
+    (new VmLinkSyncService)->sync($glpi, $mercator);
+
+    expect($updated[300]['physical_servers'])->toBe([400]);
 });
 
 it('lie via correspondance uuid exacte', function () {

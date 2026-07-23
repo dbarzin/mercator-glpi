@@ -37,6 +37,36 @@ class GlpiClient implements GlpiClientInterface
         return $this->entityId;
     }
 
+    /**
+     * Exécute $callback avec la restriction d'entité de session temporairement levée
+     * ("toutes entités"), puis la restaure. Certaines tables GLPI (ex: table
+     * "glpi_computervirtualmachines" sur GLPI 10.0.20, issue #15) n'ont pas de colonne
+     * is_recursive alors que GLPI tente d'en filtrer dessus dès qu'une entité active
+     * restreinte est définie sur la session (getEntitiesRestrictCriteria), ce qui casse
+     * la requête SQL ("Unknown column ... is_recursive") — sans lien avec les paramètres
+     * "entities_id"/"is_recursive" passés en query string (ignorés par GLPI sur ces
+     * endpoints, cf. authenticate()). GLPI expose un contournement documenté : ne PAS
+     * passer "entities_id" à changeActiveEntities bascule la session en mode
+     * "toutes entités" (glpishowallentities), ce qui fait sauter cette restriction
+     * entièrement côté serveur. Sans danger ici : l'appelant recoupe toujours le
+     * résultat avec une liste d'items déjà filtrée par entité (ex: les Computer hôtes).
+     * No-op si aucune entité n'est configurée (rien à lever/restaurer).
+     */
+    public function withoutEntityRestriction(callable $callback): mixed
+    {
+        if ($this->entityId === null) {
+            return $callback();
+        }
+
+        $this->changeActiveEntities(null);
+
+        try {
+            return $callback();
+        } finally {
+            $this->changeActiveEntities($this->entityId);
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Session
     // -------------------------------------------------------------------------
@@ -70,15 +100,24 @@ class GlpiClient implements GlpiClientInterface
         }
     }
 
-    private function changeActiveEntities(int $entityId): void
+    /**
+     * $entityId = null : bascule sur "toutes entités" (cf. withoutEntityRestriction).
+     * L'API GLPI n'accepte ce mode que si "entities_id" est absent du payload — lui
+     * envoyer explicitement la chaîne "all" est interprété comme intval("all") = 0
+     * (entité racine uniquement), pas "toutes entités".
+     */
+    private function changeActiveEntities(?int $entityId): void
     {
         $url = $this->url('changeActiveEntities');
-        Log::debug('[GLPI] POST changeActiveEntities', ['entities_id' => $entityId, 'is_recursive' => true]);
+        $payload = ['is_recursive' => true];
 
-        $response = $this->request()->post($url, [
-            'entities_id' => $entityId,
-            'is_recursive' => true,
-        ]);
+        if ($entityId !== null) {
+            $payload['entities_id'] = $entityId;
+        }
+
+        Log::debug('[GLPI] POST changeActiveEntities', $payload);
+
+        $response = $this->request()->post($url, $payload);
 
         Log::debug('[GLPI] changeActiveEntities → HTTP '.$response->status());
 

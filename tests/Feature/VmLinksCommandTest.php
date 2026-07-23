@@ -47,6 +47,7 @@ it('invoque VmLinkSyncService quand GLPI_SYNC_VM_LINKS=true et que logical_serve
         $mock->shouldReceive('getItems')->with('Item_Rack', Mockery::type('array'))->andReturn([]);
         // VmLinkSyncService::fetchAllVmEntries() : collection VM complète (issue #15).
         $mock->shouldReceive('getItems')->with('ItemVirtualMachine', Mockery::type('array'))->andReturn([]);
+        $mock->shouldReceive('withoutEntityRestriction')->andReturnUsing(fn (callable $callback) => $callback());
     });
 
     $this->mock(MercatorClientInterface::class, function ($mock) {

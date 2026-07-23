@@ -98,3 +98,76 @@ it('setEntityId remplace la valeur issue de la config', function () {
         return ($request->data()['entities_id'] ?? null) == 7;
     });
 });
+
+// ── Tests withoutEntityRestriction() (cf. VmLinkSyncService, issue #15) ───────
+
+it('withoutEntityRestriction bascule sur "toutes entités" (entities_id absent) puis restaure l\'entité configurée', function () {
+    Http::fake([
+        '*/initSession*' => Http::response(['session_token' => 'tok'], 200),
+        '*/changeActiveEntities*' => Http::response(['result' => true], 200),
+        '*/ComputerVirtualMachine*' => Http::response([], 200),
+    ]);
+
+    $client = new GlpiClient([
+        'url' => 'http://glpi.test',
+        'app_token' => 'APP',
+        'user_token' => 'USR',
+        'entity_id' => 1,
+    ]);
+    $client->authenticate();
+
+    $result = $client->withoutEntityRestriction(fn () => $client->getItems('ComputerVirtualMachine', []));
+
+    expect($result)->toBe([]);
+
+    $changeActiveEntitiesCalls = Http::recorded(fn ($request) => str_contains($request->url(), 'changeActiveEntities'))->values();
+
+    // authenticate() (entité 1) + bascule "toutes entités" (pas de entities_id) + restauration (entité 1).
+    expect($changeActiveEntitiesCalls)->toHaveCount(3);
+    expect($changeActiveEntitiesCalls[0][0]->data()['entities_id'] ?? null)->toBe(1);
+    expect($changeActiveEntitiesCalls[1][0]->data())->not->toHaveKey('entities_id');
+    expect($changeActiveEntitiesCalls[2][0]->data()['entities_id'] ?? null)->toBe(1);
+});
+
+it('withoutEntityRestriction ne fait rien (no-op) quand aucune entité n\'est configurée', function () {
+    Http::fake([
+        '*/initSession*' => Http::response(['session_token' => 'tok'], 200),
+        '*/ComputerVirtualMachine*' => Http::response([], 200),
+    ]);
+
+    $client = new GlpiClient([
+        'url' => 'http://glpi.test',
+        'app_token' => 'APP',
+        'user_token' => 'USR',
+        'entity_id' => null,
+    ]);
+    $client->authenticate();
+
+    $client->withoutEntityRestriction(fn () => $client->getItems('ComputerVirtualMachine', []));
+
+    Http::assertNotSent(fn ($request) => str_contains($request->url(), 'changeActiveEntities'));
+});
+
+it('withoutEntityRestriction restaure l\'entité même si le callback lève une exception', function () {
+    Http::fake([
+        '*/initSession*' => Http::response(['session_token' => 'tok'], 200),
+        '*/changeActiveEntities*' => Http::response(['result' => true], 200),
+    ]);
+
+    $client = new GlpiClient([
+        'url' => 'http://glpi.test',
+        'app_token' => 'APP',
+        'user_token' => 'USR',
+        'entity_id' => 1,
+    ]);
+    $client->authenticate();
+
+    expect(fn () => $client->withoutEntityRestriction(function () {
+        throw new RuntimeException('boom');
+    }))->toThrow(RuntimeException::class, 'boom');
+
+    $changeActiveEntitiesCalls = Http::recorded(fn ($request) => str_contains($request->url(), 'changeActiveEntities'))->values();
+
+    expect($changeActiveEntitiesCalls)->toHaveCount(3);
+    expect($changeActiveEntitiesCalls[2][0]->data()['entities_id'] ?? null)->toBe(1);
+});

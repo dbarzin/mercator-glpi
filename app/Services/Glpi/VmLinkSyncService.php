@@ -205,13 +205,19 @@ class VmLinkSyncService
     /**
      * Récupère la collection complète des entrées VM en un seul appel — plutôt que
      * la route sous-item "/Computer/{id}/…" appelée une fois par hôte — puis les
-     * indexe par Computer hôte GLPI. Certaines instances GLPI renvoient une erreur
-     * HTTP 500 sur cette route sous-item pour ComputerVirtualMachine alors que la
-     * recherche à plat sur la collection fonctionne (cf. issue #15, retour d'un
-     * contributeur) ; on évite ainsi ce chemin de code fragile, et on gagne en
-     * performance (1 appel au lieu de N). Même principe que buildItemRackMap()
-     * (Item_Rack, issue #8) : charger la collection de la relation une bonne fois
-     * pour toutes plutôt que de la requêter par parent.
+     * indexe par Computer hôte GLPI. Même principe que buildItemRackMap() (Item_Rack,
+     * issue #8) : charger la collection de la relation une bonne fois pour toutes
+     * plutôt que de la requêter par parent (évite le N+1, et le chemin de code du
+     * sous-item, plus rarement exercé).
+     *
+     * Exécutée via withoutEntityRestriction() : sur GLPI 10.0.20 (confirmé, issue
+     * #15), la table "glpi_computervirtualmachines" n'a pas de colonne is_recursive,
+     * or GLPI y filtre dessus dès qu'une entité active restreinte est définie sur la
+     * session — "Unknown column ... is_recursive" (500 ERROR_UNKNOWN), indépendamment
+     * des paramètres "entities_id"/"is_recursive" de la requête (ignorés par GLPI sur
+     * ces endpoints). Lever temporairement la restriction évite ce bug GLPI ; sans
+     * risque de fuite inter-entités, les entrées sont de toute façon recoupées avec
+     * $hosts/$logicalComputers (Computer), eux correctement filtrés par entité.
      *
      * Tente "ItemVirtualMachine" (GLPI 11, champs polymorphes itemtype/items_id)
      * puis retombe sur "ComputerVirtualMachine" (GLPI 10, champ computers_id) en
@@ -221,21 +227,23 @@ class VmLinkSyncService
      */
     private function fetchAllVmEntries(GlpiClientInterface $glpi): array
     {
-        $params = ['range' => '0-999', 'expand_dropdowns' => 0];
+        return $glpi->withoutEntityRestriction(function () use ($glpi) {
+            $params = ['range' => '0-999', 'expand_dropdowns' => 0];
 
-        try {
-            $entries = $glpi->getItems('ItemVirtualMachine', $params);
-            $this->vmSubItemType = 'ItemVirtualMachine';
+            try {
+                $entries = $glpi->getItems('ItemVirtualMachine', $params);
+                $this->vmSubItemType = 'ItemVirtualMachine';
 
-            return $this->indexVmEntriesByHost($entries, 'ItemVirtualMachine');
-        } catch (Throwable $e) {
-            Log::debug('[vm-links] ItemVirtualMachine indisponible ('.$e->getMessage().'), repli sur ComputerVirtualMachine (GLPI 10)');
-        }
+                return $this->indexVmEntriesByHost($entries, 'ItemVirtualMachine');
+            } catch (Throwable $e) {
+                Log::debug('[vm-links] ItemVirtualMachine indisponible ('.$e->getMessage().'), repli sur ComputerVirtualMachine (GLPI 10)');
+            }
 
-        $entries = $glpi->getItems('ComputerVirtualMachine', $params);
-        $this->vmSubItemType = 'ComputerVirtualMachine';
+            $entries = $glpi->getItems('ComputerVirtualMachine', $params);
+            $this->vmSubItemType = 'ComputerVirtualMachine';
 
-        return $this->indexVmEntriesByHost($entries, 'ComputerVirtualMachine');
+            return $this->indexVmEntriesByHost($entries, 'ComputerVirtualMachine');
+        });
     }
 
     /**

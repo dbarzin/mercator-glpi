@@ -17,4 +17,10 @@ interface GlpiClientInterface
     public function setEntityId(?int $entityId): void;
 
     public function getEntityId(): ?int;
+
+    /**
+     * Exécute $callback avec la restriction d'entité de session temporairement levée
+     * ("toutes entités"), puis la restaure. Cf. GlpiClient::withoutEntityRestriction().
+     */
+    public function withoutEntityRestriction(callable $callback): mixed;
 }
