@@ -25,10 +25,9 @@ class VmLinkSyncService
     use MatchesGlpiDropdownType;
 
     /**
-     * Sous-item GLPI portant les entrées VM d'un Computer hôte : "ItemVirtualMachine"
-     * (GLPI 11, champs polymorphes itemtype/items_id) ou "ComputerVirtualMachine"
-     * (GLPI 10, champ computers_id). Détecté au premier appel et mémorisé pour ne
-     * pas retenter les deux endpoints à chaque hôte.
+     * Itemtype GLPI portant les entrées VM : "ItemVirtualMachine" (GLPI 11, champs
+     * polymorphes itemtype/items_id) ou "ComputerVirtualMachine" (GLPI 10, champ
+     * computers_id). Mémorisé après le premier appel réussi (utile pour les tests/logs).
      */
     private ?string $vmSubItemType = null;
 
@@ -93,25 +92,16 @@ class VmLinkSyncService
             }
         }
 
-        // ── 3. Pour chaque hôte : récupérer ses entrées VM et résoudre le Computer ──
-        //      serveur logique correspondant (uuid en priorité, nom en repli).
+        // ── 3. Récupération des entrées VM (un seul appel, cf. fetchAllVmEntries) ──
+        //      puis résolution du Computer serveur logique correspondant pour
+        //      chaque entrée (uuid en priorité, nom en repli).
+
+        $vmEntriesByHost = $this->fetchAllVmEntries($glpi);
 
         $logicalToPhysical = []; // glpi_id serveur logique → [glpi_id hôte, ...]
 
         foreach ($hosts as $host) {
-            // Un hôte dont la récupération des VM échoue (ex: erreur 500 GLPI sur
-            // ComputerVirtualMachine pour ce Computer précis, cf. issue #15) ne doit
-            // pas interrompre le traitement des autres hôtes ni empêcher la
-            // résolution/écriture des liens déjà identifiés : on journalise et on
-            // passe à l'hôte suivant.
-            try {
-                $vmEntries = $this->fetchVmEntries($glpi, (int) $host['id']);
-            } catch (Throwable $e) {
-                $stats['errors']++;
-                Log::error("[vm-links] Erreur lors de la récupération des VM de l'hôte #{$host['id']} (".($host['name'] ?? '?').') : '.$e->getMessage().' — hôte ignoré');
-
-                continue;
-            }
+            $vmEntries = $vmEntriesByHost[(int) $host['id']] ?? [];
 
             foreach ($vmEntries as $vm) {
                 if ((int) ($vm['is_deleted'] ?? 0) === 1) {
@@ -213,34 +203,69 @@ class VmLinkSyncService
     // -------------------------------------------------------------------------
 
     /**
-     * Récupère les entrées VM d'un Computer hôte. GLPI 11 expose le sous-item
-     * générique "ItemVirtualMachine" (itemtype/items_id polymorphes) ; GLPI 10
-     * utilise la classe "ComputerVirtualMachine" (computers_id). On tente d'abord
-     * ItemVirtualMachine et on retombe sur ComputerVirtualMachine en cas d'échec —
-     * la détection n'est faite qu'une fois par run (mémorisée dans $vmSubItemType),
-     * les hôtes suivants utilisent directement le sous-item déjà confirmé.
+     * Récupère la collection complète des entrées VM en un seul appel — plutôt que
+     * la route sous-item "/Computer/{id}/…" appelée une fois par hôte — puis les
+     * indexe par Computer hôte GLPI. Certaines instances GLPI renvoient une erreur
+     * HTTP 500 sur cette route sous-item pour ComputerVirtualMachine alors que la
+     * recherche à plat sur la collection fonctionne (cf. issue #15, retour d'un
+     * contributeur) ; on évite ainsi ce chemin de code fragile, et on gagne en
+     * performance (1 appel au lieu de N). Même principe que buildItemRackMap()
+     * (Item_Rack, issue #8) : charger la collection de la relation une bonne fois
+     * pour toutes plutôt que de la requêter par parent.
+     *
+     * Tente "ItemVirtualMachine" (GLPI 11, champs polymorphes itemtype/items_id)
+     * puis retombe sur "ComputerVirtualMachine" (GLPI 10, champ computers_id) en
+     * cas d'échec HTTP.
+     *
+     * @return array<int, array> glpi_id du Computer hôte → [entrée VM, ...]
      */
-    private function fetchVmEntries(GlpiClientInterface $glpi, int $hostId): array
+    private function fetchAllVmEntries(GlpiClientInterface $glpi): array
     {
         $params = ['range' => '0-999', 'expand_dropdowns' => 0];
 
-        if ($this->vmSubItemType !== null) {
-            return $glpi->getSubItems('Computer', $hostId, $this->vmSubItemType, $params);
-        }
-
         try {
-            $entries = $glpi->getSubItems('Computer', $hostId, 'ItemVirtualMachine', $params);
+            $entries = $glpi->getItems('ItemVirtualMachine', $params);
             $this->vmSubItemType = 'ItemVirtualMachine';
 
-            return $entries;
+            return $this->indexVmEntriesByHost($entries, 'ItemVirtualMachine');
         } catch (Throwable $e) {
-            Log::debug("[vm-links] ItemVirtualMachine indisponible sur Computer/{$hostId} (".$e->getMessage().'), repli sur ComputerVirtualMachine (GLPI 10)');
-
-            $entries = $glpi->getSubItems('Computer', $hostId, 'ComputerVirtualMachine', $params);
-            $this->vmSubItemType = 'ComputerVirtualMachine';
-
-            return $entries;
+            Log::debug('[vm-links] ItemVirtualMachine indisponible ('.$e->getMessage().'), repli sur ComputerVirtualMachine (GLPI 10)');
         }
+
+        $entries = $glpi->getItems('ComputerVirtualMachine', $params);
+        $this->vmSubItemType = 'ComputerVirtualMachine';
+
+        return $this->indexVmEntriesByHost($entries, 'ComputerVirtualMachine');
+    }
+
+    /**
+     * Indexe les entrées VM par Computer hôte : "items_id" filtré sur
+     * itemtype="Computer" pour ItemVirtualMachine (relation polymorphe, d'autres
+     * itemtypes hôtes que Computer sont ignorés), "computers_id" pour
+     * ComputerVirtualMachine (relation directe, un seul itemtype hôte possible).
+     *
+     * @return array<int, array>
+     */
+    private function indexVmEntriesByHost(array $entries, string $subItemType): array
+    {
+        $byHost = [];
+
+        foreach ($entries as $entry) {
+            if ($subItemType === 'ItemVirtualMachine') {
+                if (($entry['itemtype'] ?? null) !== 'Computer') {
+                    continue;
+                }
+                $hostId = (int) ($entry['items_id'] ?? 0);
+            } else {
+                $hostId = (int) ($entry['computers_id'] ?? 0);
+            }
+
+            if ($hostId > 0) {
+                $byHost[$hostId][] = $entry;
+            }
+        }
+
+        return $byHost;
     }
 
     // -------------------------------------------------------------------------

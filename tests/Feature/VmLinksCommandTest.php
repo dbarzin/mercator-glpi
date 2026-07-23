@@ -45,6 +45,8 @@ it('invoque VmLinkSyncService quand GLPI_SYNC_VM_LINKS=true et que logical_serve
         $mock->shouldReceive('getItems')->with('Computer', Mockery::type('array'))->andReturn([]);
         // PhysicalServerSyncHandler implémente SupportsBayResolution (résolution bay_id).
         $mock->shouldReceive('getItems')->with('Item_Rack', Mockery::type('array'))->andReturn([]);
+        // VmLinkSyncService::fetchAllVmEntries() : collection VM complète (issue #15).
+        $mock->shouldReceive('getItems')->with('ItemVirtualMachine', Mockery::type('array'))->andReturn([]);
     });
 
     $this->mock(MercatorClientInterface::class, function ($mock) {
