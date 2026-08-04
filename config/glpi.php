@@ -23,6 +23,8 @@ return [
         'dry_run' => env('SYNC_DRY_RUN', false),
         // Import des liens VM (serveur logique) → serveur(s) physique(s) hôte(s) — opt-in
         'vm_links' => env('GLPI_SYNC_VM_LINKS', false),
+        // Ne synchronise que les bases actives (glpi_databases.is_active = 1) — opt-in, cf. issue #17
+        'only_active_databases' => env('GLPI_SYNC_ONLY_ACTIVE_DATABASES', false),
     ],
 
     // Filtrage par statut GLPI (states_id) — vide = tous statuts acceptés

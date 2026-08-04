@@ -190,6 +190,7 @@ Copiez `.env.sample` vers `.env` et renseignez les valeurs :
 | `MERCATOR_PASSWORD` | — | Mot de passe du compte Mercator                                                                                                                                           | `motdepasse`                                           |
 | `SYNC_DRY_RUN` | `false` | Si `true`, simule sans écrire dans Mercator                                                                                                                               | `true`                                                 |
 | `GLPI_SYNC_VM_LINKS` | `false` | Si `true`, importe les liens serveur logique (VM) ↔ serveur(s) physique(s) hôte(s) (voir [Liens VM ↔ serveur physique](#liens-serveur-logique-vm--serveur-physique-glpi_sync_vm_links)) | `true`                                                 |
+| `GLPI_SYNC_ONLY_ACTIVE_DATABASES` | `false` | Si `true`, ne synchronise que les bases de données dont `is_active = 1` dans GLPI ; `false` = toutes les bases | `true`                                                 |
 | `LOG_LEVEL` | `info` | Niveau de verbosité des logs (`debug`, `info`, `warning`, `error`)                                                                                                        | `debug`                                                |
 
 ### Configuration côté GLPI
@@ -268,7 +269,7 @@ Cet ordre est appliqué automatiquement lors de la synchronisation complète (`p
 
 `vm_links` n'est **pas** une valeur `--type` sélectionnable : contrairement aux autres étapes ci-dessus, c'est un service distinct (`VmLinkSyncService`), invoqué automatiquement par `GlpiSyncCommand` après la boucle des types, uniquement si `GLPI_SYNC_VM_LINKS=true` **et** que `logical_servers` et `physical_servers` ont tous les deux été synchronisés dans ce run (synchronisation complète, ou `--type=logical_servers --type=physical_servers` explicite). Dans les autres cas (ex. `--type=workstations` seul), l'étape est silencieusement ignorée (log info), sans erreur.
 
-`certificates` et `clusters` ne font **pas** partie de la synchronisation complète par défaut : ils ne sont exécutés que si on les demande explicitement via `--type=certificates` / `--type=clusters`.
+`certificates`, `clusters` et `databases` ne font **pas** partie de la synchronisation complète par défaut : ils ne sont exécutés que si on les demande explicitement via `--type=certificates` / `--type=clusters` / `--type=databases`.
 
 ### Synchronisation par type
 
@@ -290,6 +291,7 @@ php application glpi:sync --type=logical_servers
 php application glpi:sync --type=physical_servers
 php application glpi:sync --type=certificates     # pas inclus dans la sync complète, opt-in
 php application glpi:sync --type=clusters         # pas inclus dans la sync complète, opt-in
+php application glpi:sync --type=databases        # pas inclus dans la sync complète, opt-in
 php application glpi:sync --type=links            # liens workstation ↔ application
 php application glpi:sync --type=activity_links   # liens activité ↔ application
 php application glpi:sync --type=appliance_links  # liens application ↔ serveur logique (mode applications uniquement)
@@ -353,6 +355,7 @@ php application glpi:sync --type=logical_servers --type=physical_servers
 | `physical_servers` | `Computer` (filtré par `GLPI_COMPUTER_TYPES_PHYSICAL_SERVERS`) | `physical-servers` | actifs |
 | `certificates` | `Certificate` (pas dans la sync complète par défaut) | `certificates` | actifs |
 | `clusters` | `Cluster` (pas dans la sync complète par défaut) | `clusters` | actifs |
+| `databases` | `Database` (pas dans la sync complète par défaut, filtrée par `GLPI_SYNC_ONLY_ACTIVE_DATABASES`) | `databases` | actifs |
 | `links` | `Computer_SoftwareVersion` | pivot `workstation_application` | liens |
 | `activity_links` | `Appliance_Item` (itemtype=Software) | pivot `activity_application` | liens |
 | `appliance_links` | `Appliance_Item` (itemtype=Computer) | `applications.logical_servers` | liens (mode `applications` uniquement) |
@@ -719,6 +722,15 @@ GLPI_DOMAIN_TYPES=Interne
 Vide = tous les `Domain` sont acceptés, quel que soit leur `domaintypes_id`.
 
 > **Note sur `--entity`/`GLPI_ENTITY_ID` et `Domain`** : l'API GLPI ne restreint pas toujours les `Domain` retournés à l'entité active de la session, contrairement aux autres itemtypes. Le connecteur applique donc un filtrage explicite côté client pour ce type (comparaison de l'entité de chaque domaine avec l'entité configurée, y compris ses sous-entités) — aucune configuration supplémentaire n'est nécessaire, `--entity`/`GLPI_ENTITY_ID` suffit.
+
+### Par statut actif (Database)
+
+```ini
+# Ne synchroniser que les bases de données actives
+GLPI_SYNC_ONLY_ACTIVE_DATABASES=true
+```
+
+Opt-in (défaut `false` = toutes les bases sont synchronisées, comportement historique). Ce filtre porte sur `glpi_databases.is_active` et est **distinct** de `GLPI_ALLOWED_STATES*` : la table `glpi_databases` n'a pas de colonne `states_id`, ce filtre ne peut donc pas s'appliquer aux `Database` via le mécanisme de statut générique. Comme pour les autres filtres de sous-type, les exclusions sont journalisées en `debug` (`Filtre sous-type : N item(s) exclus`).
 
 ---
 
