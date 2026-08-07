@@ -56,7 +56,12 @@ cmd_stop() {
     check_compose_file
     print_header
     echo -e "${YELLOW}» Arrêt du stack GLPI...${NC}"
-    compose down
+    # Utilise "stop" (et non "down") pour préserver les conteneurs : le code
+    # GLPI vit dans /var/www/html/glpi, hors des volumes persistants
+    # (files/plugins/config). Un "down" le détruit et force un re-téléchargement
+    # de la dernière version de GLPI au prochain démarrage, ce qui peut déclencher
+    # une mise à jour non désirée et invalider la clé API. Voir `update`.
+    compose stop
     echo -e "${GREEN}✔ Stack arrêté.${NC}"
 }
 
@@ -64,6 +69,31 @@ cmd_restart() {
     cmd_stop
     echo ""
     cmd_start
+}
+
+cmd_down() {
+    check_compose_file
+    print_header
+    echo -e "${YELLOW}» Suppression des conteneurs GLPI (les volumes sont conservés)...${NC}"
+    compose down
+    echo -e "${GREEN}✔ Conteneurs supprimés.${NC}"
+}
+
+cmd_update() {
+    check_compose_file
+    print_header
+    echo -e "${YELLOW}» Mise à jour de GLPI (code + éventuellement image Docker)...${NC}"
+    echo -e "${YELLOW}  Cela va détruire puis recréer les conteneurs : la dernière${NC}"
+    echo -e "${YELLOW}  version de GLPI sera re-téléchargée. Une mise à jour de base${NC}"
+    echo -e "${YELLOW}  de données peut être requise via l'interface web, et la clé${NC}"
+    echo -e "${YELLOW}  API pourrait devoir être régénérée.${NC}"
+    compose pull
+    compose down
+    compose up -d --remove-orphans --force-recreate
+    echo ""
+    cmd_status
+    echo ""
+    cmd_url
 }
 
 cmd_status() {
@@ -144,11 +174,13 @@ cmd_help() {
     echo ""
     echo -e "Commandes disponibles :"
     echo -e "  ${GREEN}start${NC}           Démarrer le stack GLPI"
-    echo -e "  ${GREEN}stop${NC}            Arrêter le stack GLPI"
+    echo -e "  ${GREEN}stop${NC}            Arrêter le stack GLPI (conteneurs conservés)"
     echo -e "  ${GREEN}restart${NC}         Redémarrer le stack GLPI"
     echo -e "  ${GREEN}status${NC}          Voir l'état des conteneurs"
     echo -e "  ${GREEN}logs${NC} [service]  Suivre les logs (optionnel : glpi | db)"
     echo -e "  ${GREEN}url${NC}             Afficher les URLs d'accès"
+    echo -e "  ${GREEN}down${NC}            Supprimer les conteneurs (volumes conservés)"
+    echo -e "  ${GREEN}update${NC}          Forcer la mise à jour de GLPI (re-télécharge la dernière version)"
     echo ""
     echo "Fichier compose : $COMPOSE_FILE"
 }
@@ -166,6 +198,8 @@ case "$COMMAND" in
     status)  print_header; cmd_status ;;
     logs)    cmd_logs "$@" ;;
     url)     cmd_url ;;
+    down)    cmd_down ;;
+    update)  cmd_update ;;
     help|--help|-h) cmd_help ;;
     *)
         echo -e "${RED}[ERROR]${NC} Commande inconnue : '$COMMAND'"

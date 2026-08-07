@@ -143,8 +143,12 @@ Un stack Docker est fourni pour tester contre une instance GLPI locale :
 ./glpi.sh start    # Démarre GLPI sur http://localhost:8080
 ./glpi.sh status   # Affiche l'état des conteneurs
 ./glpi.sh logs     # Consulte les logs en temps réel
-./glpi.sh stop     # Arrête les conteneurs
+./glpi.sh stop     # Arrête les conteneurs (conservés, pas de réinstallation au redémarrage)
+./glpi.sh down     # Supprime les conteneurs (les volumes/données sont conservés)
+./glpi.sh update   # Force la mise à jour vers la dernière version de GLPI
 ```
+
+`stop` conserve les conteneurs (contrairement à `down`) : le code de GLPI vit hors des volumes persistants (`files`/`plugins`/`config`), donc un `down` suivi d'un `start` le retélécharge entièrement au prochain démarrage, ce qui peut déclencher une mise à jour GLPI non désirée et invalider le jeton d'API applicatif. N'utilisez `down` ou `update` que lorsque vous voulez explicitement forcer une réinstallation/mise à jour.
 
 Lors du premier démarrage, un wizard d'installation s'affiche dans le navigateur. Renseignez les paramètres de base de données suivants :
 
