@@ -2,11 +2,12 @@
 
 namespace App\Services\Glpi\Handlers;
 
+use App\Services\Glpi\Contracts\SupportsDatabaseInstanceResolution;
 use App\Services\Glpi\Contracts\SyncHandler;
 use App\Services\Glpi\Mappers\DatabaseMapper;
 use Illuminate\Support\Facades\Log;
 
-class DatabaseSyncHandler implements SyncHandler
+class DatabaseSyncHandler implements SupportsDatabaseInstanceResolution, SyncHandler
 {
     public function __construct(private readonly DatabaseMapper $mapper) {}
 
@@ -23,9 +24,9 @@ class DatabaseSyncHandler implements SyncHandler
     public function glpiQueryParams(): array
     {
         return [
-            'range'            => '0-999',
+            'range' => '0-999',
             'expand_dropdowns' => 1,
-            'with_items'       => 1,
+            'with_items' => 1,
         ];
     }
 

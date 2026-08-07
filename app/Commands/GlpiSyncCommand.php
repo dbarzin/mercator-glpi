@@ -205,6 +205,27 @@ class GlpiSyncCommand extends Command
                 continue;
             }
 
+            if ($type === 'database_links') {
+                $this->line('  <fg=cyan>─── database_links ───</>');
+                try {
+                    $linkStats = $syncService->syncDatabaseLinks($glpi, $mercator, $dryRun);
+                    $this->line(sprintf(
+                        '  <fg=yellow>~%d mis à jour</>  <fg=gray>%d ignorés</>  <fg=red>%d erreurs</>',
+                        $linkStats['updated'],
+                        $linkStats['skipped'],
+                        $linkStats['errors'],
+                    ));
+                    $globalStats['updated'] += $linkStats['updated'];
+                    $globalStats['errors'] += $linkStats['errors'];
+                } catch (Throwable $e) {
+                    $this->error('  Erreur lors de la sync database_links : '.$e->getMessage());
+                    $globalStats['errors']++;
+                }
+                $this->line('');
+
+                continue;
+            }
+
             if (! isset($this->handlers[$type])) {
                 $this->warn("  Type inconnu ou non actif : {$type}");
 

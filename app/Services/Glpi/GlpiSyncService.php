@@ -5,6 +5,7 @@ namespace App\Services\Glpi;
 use App\Services\Glpi\Contracts\GlpiClientInterface;
 use App\Services\Glpi\Contracts\SupportsBayResolution;
 use App\Services\Glpi\Contracts\SupportsCustomExtRefsTag;
+use App\Services\Glpi\Contracts\SupportsDatabaseInstanceResolution;
 use App\Services\Glpi\Contracts\SupportsExplicitEntityFilter;
 use App\Services\Glpi\Contracts\SupportsGlpiItemDetail;
 use App\Services\Glpi\Contracts\SupportsGlpiOperatingSystem;
@@ -222,6 +223,14 @@ class GlpiSyncService
         if ($handler instanceof SupportsBayResolution) {
             $context['item_rack_map'] = $this->buildItemRackMap($glpi);
             $context['racks_map'] = $this->buildRacksMap($mercator);
+        }
+
+        // Résolution du type de technologie (DatabaseInstance GLPI → databases.type
+        // Mercator) : opt-in (cf. SupportsDatabaseInstanceResolution) car elle implique
+        // de charger toutes les DatabaseInstance/Database GLPI en plus de la collection
+        // Database déjà chargée à l'étape 1.
+        if ($handler instanceof SupportsDatabaseInstanceResolution) {
+            $context['database_types'] = $this->buildDatabaseTypesMap($glpi);
         }
 
         // ── 6. GLPI → Mercator : créer ou mettre à jour ───────────────────────
@@ -729,6 +738,141 @@ class GlpiSyncService
         return $stats;
     }
 
+    /**
+     * Synchronise les liens base de données ↔ serveur logique depuis GLPI vers
+     * Mercator, via l'hôte (Computer) de la DatabaseInstance parente de chaque
+     * Database GLPI (cf. issue #17).
+     *
+     * Une Database GLPI ne porte ni son hôte ni son type directement : les deux
+     * vivent sur la DatabaseInstance pointée par databaseinstances_id. Seuls les
+     * hôtes de type Computer sont supportés — App\Models\Database ne possède pas
+     * de pivot vers physical-servers côté Mercator.
+     *
+     * Réconciliation database↔database et Computer↔serveur logique via ext_refs
+     * ({GLPI}<id>) en priorité, nom (lowercase, trim) en repli pour les items
+     * Mercator pas encore tagués (cf. buildMercatorIndexes()).
+     *
+     * Remplacement, pas fusion : seules les bases dont l'hôte se résout sont
+     * réécrites (pas de passage de nettoyage global sur toutes les bases taguées
+     * {GLPI}, contrairement à vm_links) — un lien déjà écrit n'est pas retiré si
+     * l'hôte cesse de se résoudre à une exécution suivante.
+     *
+     * @return array{updated: int, skipped: int, errors: int}
+     */
+    public function syncDatabaseLinks(
+        GlpiClientInterface $glpi,
+        MercatorClientInterface $mercator,
+        bool $dryRun = false,
+    ): array {
+        $stats = ['updated' => 0, 'skipped' => 0, 'errors' => 0];
+
+        // ── 1. Chargement ─────────────────────────────────────────────────────
+
+        // expand_dropdowns=0 : databaseinstances_id doit rester l'id GLPI numérique
+        // pour la jointure ci-dessous (cf. issue #8).
+        $databases = $glpi->getItems('Database', ['range' => '0-999', 'expand_dropdowns' => 0]);
+
+        // expand_dropdowns=0 : items_id doit rester l'id GLPI numérique de l'hôte
+        // (cf. issue #8) — la valeur par défaut (1) l'expanse en nom.
+        $instances = $glpi->getItems('DatabaseInstance', ['range' => '0-999', 'expand_dropdowns' => 0]);
+
+        $instancesById = [];
+        foreach ($instances as $instance) {
+            $instancesById[(int) $instance['id']] = $instance;
+        }
+
+        $dbItems = $mercator->getAll('databases');
+        $logicalServerItems = $mercator->getAll('logical-servers');
+
+        // ── 2. Index Mercator ─────────────────────────────────────────────────
+
+        $dbIndex = $this->buildMercatorIndexes($dbItems, '{GLPI}');
+        $lsIndex = $this->buildMercatorIndexes($logicalServerItems, '{GLPI}');
+
+        Log::info(sprintf(
+            '[database_links] %d databases GLPI, %d instances GLPI, %d databases Mercator, %d serveurs logiques Mercator',
+            count($databases),
+            count($instances),
+            count($dbItems),
+            count($logicalServerItems),
+        ));
+
+        // ── 3. Pour chaque Database : lier à son serveur logique hôte ─────────
+
+        foreach ($databases as $database) {
+            $db = $this->resolveMercatorMatch(
+                $dbIndex,
+                (string) $database['id'],
+                strtolower(trim($database['name'] ?? ''))
+            );
+
+            if ($db === null) {
+                $stats['skipped']++;
+                Log::debug("[database_links] Base sans database Mercator correspondante : {$database['name']}");
+
+                continue;
+            }
+
+            $instance = $instancesById[(int) ($database['databaseinstances_id'] ?? 0)] ?? null;
+
+            if ($instance === null) {
+                $stats['skipped']++;
+                Log::debug("[database_links] {$database['name']} : base sans instance résolue");
+
+                continue;
+            }
+
+            if (($instance['itemtype'] ?? null) !== 'Computer') {
+                $stats['skipped']++;
+                Log::debug("[database_links] {$database['name']} : hôte non-Computer ({$instance['itemtype']}), non supporté");
+
+                continue;
+            }
+
+            $hostId = (int) ($instance['items_id'] ?? 0);
+
+            if ($hostId === 0) {
+                $stats['skipped']++;
+                Log::debug("[database_links] {$database['name']} : instance sans hôte (items_id vide)");
+
+                continue;
+            }
+
+            $ls = $this->resolveLinkedItemMatch($glpi, $lsIndex, 'Computer', $instance, '[database_links]');
+
+            if ($ls === null) {
+                $stats['skipped']++;
+                Log::debug("[database_links] Computer #{$hostId} hôte de la base {$database['name']} sans serveur logique Mercator correspondant");
+
+                continue;
+            }
+
+            try {
+                if (! $dryRun) {
+                    $payload = [
+                        'name' => $database['name'],
+                        'logical_servers' => [$ls['id']],
+                    ];
+
+                    Log::debug(sprintf(
+                        '[database_links] PUT databases/%d payload: %s',
+                        $db['id'],
+                        json_encode($payload)
+                    ));
+
+                    $mercator->update('databases', $db['id'], $payload);
+                }
+                $stats['updated']++;
+                Log::info("[database_links] {$database['name']} → serveur logique {$ls['name']}");
+            } catch (Throwable $e) {
+                $stats['errors']++;
+                Log::error("[database_links] Erreur pour {$database['name']} : ".$e->getMessage());
+            }
+        }
+
+        return $stats;
+    }
+
     // -------------------------------------------------------------------------
     // Helpers — filtrage statut (Évolution 2)
     // -------------------------------------------------------------------------
@@ -1037,6 +1181,48 @@ class GlpiSyncService
         }
 
         return $map;
+    }
+
+    // -------------------------------------------------------------------------
+    // Helpers — types de technologie (DatabaseInstance GLPI → databases.type Mercator)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Indexe le type de technologie (ex. MariaDB, PostgreSQL) de chaque Database GLPI,
+     * résolu via sa DatabaseInstance parente (databaseinstances_id → databaseinstancetypes_id).
+     * Une Database GLPI ne porte ni son type ni son hôte directement : les deux vivent
+     * sur la DatabaseInstance pointée par databaseinstances_id.
+     *
+     * @return array<int, string> id GLPI de la Database → nom du type de technologie
+     */
+    private function buildDatabaseTypesMap(GlpiClientInterface $glpi): array
+    {
+        // expand_dropdowns=1 : databaseinstancetypes_id doit être le NOM du type
+        // (MariaDB, PostgreSQL…), l'id lui-même de la DatabaseInstance reste numérique.
+        $instances = $glpi->getItems('DatabaseInstance', ['range' => '0-999', 'expand_dropdowns' => 1]);
+
+        $typeByInstanceId = [];
+        foreach ($instances as $instance) {
+            $typeByInstanceId[(int) $instance['id']] = trim((string) ($instance['databaseinstancetypes_id'] ?? ''));
+        }
+
+        // expand_dropdowns=0 : databaseinstances_id doit rester l'id GLPI numérique pour
+        // la jointure ci-dessous (cf. issue #8) — la valeur par défaut (1) l'expanse en
+        // nom et casse la résolution par id.
+        $databases = $glpi->getItems('Database', ['range' => '0-999', 'expand_dropdowns' => 0]);
+
+        $typeByDbId = [];
+        foreach ($databases as $database) {
+            $type = $typeByInstanceId[(int) ($database['databaseinstances_id'] ?? 0)] ?? null;
+
+            if ($type !== null && $type !== '') {
+                $typeByDbId[(int) $database['id']] = $type;
+            }
+        }
+
+        Log::info('[databases] '.count($typeByDbId).' type(s) de technologie résolus via DatabaseInstance');
+
+        return $typeByDbId;
     }
 
     /**

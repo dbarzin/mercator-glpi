@@ -262,14 +262,15 @@ Certains types doivent être synchronisés avant d'autres pour que les liens et 
 16. links                       → lie les workstations ↔ applications (nécessite 4 et 6)
 17. activity_links               → lie les activities ↔ applications (nécessite 4 et 5)
 18. appliance_links              → lie les applications ↔ serveurs logiques (nécessite 5 en mode applications et 14)
-19. vm_links (GLPI_SYNC_VM_LINKS) → lie les serveurs logiques (VM) ↔ serveurs physiques hôtes (nécessite 14 et 15)
+19. database_links               → lie les databases ↔ serveur logique hôte (nécessite databases et 14)
+20. vm_links (GLPI_SYNC_VM_LINKS) → lie les serveurs logiques (VM) ↔ serveurs physiques hôtes (nécessite 14 et 15)
 ```
 
 Cet ordre est appliqué automatiquement lors de la synchronisation complète (`php application glpi:sync`).
 
 `vm_links` n'est **pas** une valeur `--type` sélectionnable : contrairement aux autres étapes ci-dessus, c'est un service distinct (`VmLinkSyncService`), invoqué automatiquement par `GlpiSyncCommand` après la boucle des types, uniquement si `GLPI_SYNC_VM_LINKS=true` **et** que `logical_servers` et `physical_servers` ont tous les deux été synchronisés dans ce run (synchronisation complète, ou `--type=logical_servers --type=physical_servers` explicite). Dans les autres cas (ex. `--type=workstations` seul), l'étape est silencieusement ignorée (log info), sans erreur.
 
-`certificates`, `clusters` et `databases` ne font **pas** partie de la synchronisation complète par défaut : ils ne sont exécutés que si on les demande explicitement via `--type=certificates` / `--type=clusters` / `--type=databases`.
+`certificates`, `clusters`, `databases` et `database_links` ne font **pas** partie de la synchronisation complète par défaut : ils ne sont exécutés que si on les demande explicitement via `--type=certificates` / `--type=clusters` / `--type=databases` / `--type=database_links`.
 
 ### Synchronisation par type
 
@@ -295,6 +296,7 @@ php application glpi:sync --type=databases        # pas inclus dans la sync comp
 php application glpi:sync --type=links            # liens workstation ↔ application
 php application glpi:sync --type=activity_links   # liens activité ↔ application
 php application glpi:sync --type=appliance_links  # liens application ↔ serveur logique (mode applications uniquement)
+php application glpi:sync --type=database_links   # liens database ↔ serveur logique (pas inclus dans la sync complète, opt-in)
 ```
 
 ### Options disponibles
@@ -355,10 +357,11 @@ php application glpi:sync --type=logical_servers --type=physical_servers
 | `physical_servers` | `Computer` (filtré par `GLPI_COMPUTER_TYPES_PHYSICAL_SERVERS`) | `physical-servers` | actifs |
 | `certificates` | `Certificate` (pas dans la sync complète par défaut) | `certificates` | actifs |
 | `clusters` | `Cluster` (pas dans la sync complète par défaut) | `clusters` | actifs |
-| `databases` | `Database` (pas dans la sync complète par défaut, filtrée par `GLPI_SYNC_ONLY_ACTIVE_DATABASES`) | `databases` | actifs |
+| `databases` | `Database` (pas dans la sync complète par défaut, filtrée par `GLPI_SYNC_ONLY_ACTIVE_DATABASES`) — `type` résolu via `DatabaseInstance.databaseinstancetypes_id` | `databases` | actifs |
 | `links` | `Computer_SoftwareVersion` | pivot `workstation_application` | liens |
 | `activity_links` | `Appliance_Item` (itemtype=Software) | pivot `activity_application` | liens |
 | `appliance_links` | `Appliance_Item` (itemtype=Computer) | `applications.logical_servers` | liens (mode `applications` uniquement) |
+| `database_links` | `DatabaseInstance.itemtype`/`items_id` (hôte, itemtype=Computer uniquement, pas dans la sync complète par défaut) | `databases.logical_servers` | liens |
 
 ### Détail des champs par type
 
@@ -560,6 +563,20 @@ Filtré par `GLPI_NETWORK_DEVICE_TYPES_STORAGE_DEVICES` (opt-in, vide = aucun é
 | `states_id` | `status` |
 | `"GLPI"` | `update_source` |
 
+#### Bases de données (`Database` → `databases`)
+
+| Champ GLPI | Champ Mercator |
+|---|---|
+| `name` | `name` |
+| `DatabaseInstance.databaseinstancetypes_id` (via `databaseinstances_id`) | `type` |
+| `"GLPI"` | `update_source` |
+
+Une `Database` GLPI ne porte pas directement son type de technologie (MariaDB, PostgreSQL, Oracle…) : celui-ci vit sur la `DatabaseInstance` parente, pointée par `databaseinstances_id`. Le connecteur résout ce type pour toutes les bases en un aller-retour supplémentaire (`DatabaseInstance` avec `expand_dropdowns=1`, puis jointure avec `Database` en `expand_dropdowns=0` pour garder `databaseinstances_id` numérique, cf. issue #8) et l'injecte dans le mapper via `SupportsDatabaseInstanceResolution`.
+
+Si le type ne peut pas être résolu (base sans instance, instance sans type), le champ `type` est **omis** du payload — jamais envoyé à `null`/`''` — afin de ne pas écraser une valeur déjà présente côté Mercator.
+
+Filtrage opt-in par `GLPI_SYNC_ONLY_ACTIVE_DATABASES` (cf. [Filtrage des actifs](#filtrage-des-actifs)). Pas dans la sync complète par défaut : `--type=databases`.
+
 #### Liens workstation ↔ application (`links`)
 
 Pour chaque poste de travail présent dans Mercator, récupère individuellement ses logiciels installés depuis GLPI (`with_softwares=1`, `expand_dropdowns=0` — l'id numérique du logiciel est requis pour le matching `ext_refs`) et met à jour le pivot `workstation_application`.
@@ -590,6 +607,26 @@ Source GLPI : pivot `Appliance_Item` filtré sur `itemtype=Computer` (ordinateur
 - `logical_servers` doit avoir été synchronisé au préalable : seuls les `Computer` déjà présents comme serveur logique Mercator (routés via `GLPI_COMPUTER_TYPES_LOGICAL_SERVERS`) sont liés. Un `Computer` lié à l'Appliance mais non retenu par ce filtre (ex. simple poste de travail) est ignoré silencieusement (log debug), sans compter comme erreur.
 
 **Remplacement, pas fusion** : le tableau `logical_servers` envoyé à chaque exécution **remplace** la liste des serveurs logiques liés à l'application (comportement standard des champs de relation Mercator, identique à `activities`/`applications` sur `links`/`activity_links`) — un `Computer` retiré de l'Appliance côté GLPI est délié à la synchronisation suivante.
+
+#### Liens database ↔ serveur logique (`database_links`)
+
+Pour chaque `Database` GLPI ayant une database Mercator correspondante, résout sa `DatabaseInstance` parente (via `databaseinstances_id`) puis l'hôte de cette instance (`itemtype`/`items_id`), et met à jour le champ `logical_servers` du pivot côté database.
+
+Source GLPI : `Database.databaseinstances_id → DatabaseInstance.itemtype/items_id`. La correspondance database ↔ database Mercator et Computer (hôte) ↔ serveur logique se fait via `ext_refs` (`{GLPI}<id>`) en priorité, nom en repli (repli nécessitant un appel GLPI complémentaire pour l'hôte, cf. note sur `activity_links` plus haut).
+
+**Limitation — hôtes serveur physique non supportés** : `App\Models\Database` (Mercator) n'expose qu'un pivot `logicalServers()`, pas de pivot vers `physical-servers`. Une `DatabaseInstance` dont l'hôte (`itemtype`) n'est pas `Computer`, ou dont le `Computer` hôte a été synchronisé comme serveur **physique** plutôt que logique, est ignorée (log debug), sans compter comme erreur.
+
+**Prérequis** :
+- `databases` doit avoir été synchronisé au préalable (catalogue de databases Mercator taguées `{GLPI}`).
+- `logical_servers` doit avoir été synchronisé au préalable : seul un `Computer` hôte déjà présent comme serveur logique Mercator est lié.
+
+**Remplacement par base individuelle, pas de nettoyage global** : à chaque exécution, seules les bases dont l'hôte se résout sont réécrites (`logical_servers` remplace la liste existante pour cette base, comme `appliance_links`) — contrairement à `vm_links`, il n'y a **pas** de passage de nettoyage sur l'ensemble des bases taguées `{GLPI}` : si l'hôte d'une base cesse de se résoudre, un lien déjà écrit à une exécution précédente n'est **pas** retiré.
+
+Pas dans la sync complète par défaut (opt-in, comme `databases`) :
+
+```bash
+php application glpi:sync --type=databases --type=database_links
+```
 
 #### Liens serveur logique (VM) ↔ serveur physique (`GLPI_SYNC_VM_LINKS`)
 
