@@ -766,11 +766,27 @@ class GlpiSyncService
     ): array {
         $stats = ['updated' => 0, 'skipped' => 0, 'errors' => 0];
 
+        // Répartition des "skipped" par cause, journalisée en résumé à la fin (niveau
+        // info, donc visible sans LOG_LEVEL=debug) pour diagnostiquer en un coup d'œil
+        // où la chaîne Database → DatabaseInstance → Computer → serveur logique casse.
+        $skipReasons = [
+            'no_mercator_database' => 0,
+            'no_instance' => 0,
+            'instance_not_computer' => 0,
+            'instance_no_host_id' => 0,
+            'no_logical_server' => 0,
+        ];
+
         // ── 1. Chargement ─────────────────────────────────────────────────────
 
         // expand_dropdowns=0 : databaseinstances_id doit rester l'id GLPI numérique
         // pour la jointure ci-dessous (cf. issue #8).
         $databases = $glpi->getItems('Database', ['range' => '0-999', 'expand_dropdowns' => 0]);
+
+        Log::debug('[database_links] Database bruts reçus de GLPI : '.json_encode(array_map(
+            fn ($d) => ['id' => $d['id'] ?? null, 'name' => $d['name'] ?? null, 'databaseinstances_id' => $d['databaseinstances_id'] ?? null],
+            $databases
+        ), JSON_UNESCAPED_UNICODE));
 
         // La collection DatabaseInstance (getItems) ne renvoie que les champs
         // d'affichage par défaut de cet itemtype — itemtype/items_id (la référence
@@ -779,6 +795,10 @@ class GlpiSyncService
         // ::glpiDetailParams() : « la requête de collection n'est pas fiable »). getItem()
         // (item par item) renvoie l'enregistrement brut complet, itemtype/items_id inclus
         // — un seul appel par instance réellement référencée, dédupliqué.
+        //
+        // Enveloppé en try/catch par instance : une DatabaseInstance introuvable ou en
+        // erreur côté GLPI (ex. supprimée entre-temps) ne doit pas faire échouer tout le
+        // run — seules les Database qui en dépendent sont ignorées (skip "no_instance").
         $instancesById = [];
         foreach ($databases as $database) {
             $instanceId = (int) ($database['databaseinstances_id'] ?? 0);
@@ -787,7 +807,20 @@ class GlpiSyncService
                 continue;
             }
 
-            $instancesById[$instanceId] = $glpi->getItem('DatabaseInstance', $instanceId, ['expand_dropdowns' => 0]);
+            try {
+                $instance = $glpi->getItem('DatabaseInstance', $instanceId, ['expand_dropdowns' => 0]);
+                $instancesById[$instanceId] = $instance;
+
+                Log::debug(sprintf(
+                    '[database_links] DatabaseInstance #%d : itemtype=%s, items_id=%s',
+                    $instanceId,
+                    var_export($instance['itemtype'] ?? null, true),
+                    var_export($instance['items_id'] ?? null, true),
+                ));
+            } catch (Throwable $e) {
+                $instancesById[$instanceId] = null;
+                Log::warning("[database_links] DatabaseInstance #{$instanceId} : échec de résolution (getItem) — ".$e->getMessage());
+            }
         }
 
         $dbItems = $mercator->getAll('databases');
@@ -799,41 +832,50 @@ class GlpiSyncService
         $lsIndex = $this->buildMercatorIndexes($logicalServerItems, '{GLPI}');
 
         Log::info(sprintf(
-            '[database_links] %d databases GLPI, %d instances GLPI résolues, %d databases Mercator, %d serveurs logiques Mercator',
+            '[database_links] %d databases GLPI, %d instances GLPI résolues, %d databases Mercator (%d taguées {GLPI}), %d serveurs logiques Mercator (%d tagués {GLPI})',
             count($databases),
-            count($instancesById),
+            count(array_filter($instancesById)),
             count($dbItems),
+            count($dbIndex['byGlpiId']),
             count($logicalServerItems),
+            count($lsIndex['byGlpiId']),
         ));
 
         // ── 3. Pour chaque Database : lier à son serveur logique hôte ─────────
 
         foreach ($databases as $database) {
+            $glpiDbId = (string) $database['id'];
             $db = $this->resolveMercatorMatch(
                 $dbIndex,
-                (string) $database['id'],
+                $glpiDbId,
                 strtolower(trim($database['name'] ?? ''))
             );
 
             if ($db === null) {
                 $stats['skipped']++;
-                Log::debug("[database_links] Base sans database Mercator correspondante : {$database['name']}");
+                $skipReasons['no_mercator_database']++;
+                Log::debug("[database_links] Database GLPI #{$glpiDbId} '{$database['name']}' : aucune database Mercator correspondante (ni ext_refs {GLPI}{$glpiDbId}, ni nom)");
 
                 continue;
             }
 
-            $instance = $instancesById[(int) ($database['databaseinstances_id'] ?? 0)] ?? null;
+            Log::debug("[database_links] Database GLPI #{$glpiDbId} '{$database['name']}' → Mercator #{$db['id']}");
+
+            $instanceId = (int) ($database['databaseinstances_id'] ?? 0);
+            $instance = $instancesById[$instanceId] ?? null;
 
             if ($instance === null) {
                 $stats['skipped']++;
-                Log::debug("[database_links] {$database['name']} : base sans instance résolue");
+                $skipReasons['no_instance']++;
+                Log::debug("[database_links] '{$database['name']}' : databaseinstances_id={$instanceId} — instance introuvable ou non résolue (cf. warning ci-dessus si échec getItem)");
 
                 continue;
             }
 
             if (($instance['itemtype'] ?? null) !== 'Computer') {
                 $stats['skipped']++;
-                Log::debug("[database_links] {$database['name']} : hôte non-Computer ({$instance['itemtype']}), non supporté");
+                $skipReasons['instance_not_computer']++;
+                Log::debug('[database_links] \''.$database['name']."' : hôte non-Computer (itemtype=".var_export($instance['itemtype'] ?? null, true).'), non supporté (physical-server/autre itemtype)');
 
                 continue;
             }
@@ -842,7 +884,8 @@ class GlpiSyncService
 
             if ($hostId === 0) {
                 $stats['skipped']++;
-                Log::debug("[database_links] {$database['name']} : instance sans hôte (items_id vide)");
+                $skipReasons['instance_no_host_id']++;
+                Log::debug("[database_links] '{$database['name']}' : instance #{$instanceId} sans hôte (items_id vide ou 0)");
 
                 continue;
             }
@@ -851,7 +894,8 @@ class GlpiSyncService
 
             if ($ls === null) {
                 $stats['skipped']++;
-                Log::debug("[database_links] Computer #{$hostId} hôte de la base {$database['name']} sans serveur logique Mercator correspondant");
+                $skipReasons['no_logical_server']++;
+                Log::debug("[database_links] Computer #{$hostId} hôte de la base '{$database['name']}' : aucun serveur logique Mercator correspondant (ni ext_refs {GLPI}{$hostId}, ni nom — vérifier que ce Computer a bien été synchronisé via --type=logical_servers)");
 
                 continue;
             }
@@ -878,6 +922,16 @@ class GlpiSyncService
                 Log::error("[database_links] Erreur pour {$database['name']} : ".$e->getMessage());
             }
         }
+
+        Log::info(sprintf(
+            '[database_links] Répartition des %d ignorées : sans database Mercator=%d, sans instance résolue=%d, hôte non-Computer=%d, instance sans hôte=%d, hôte sans serveur logique Mercator=%d',
+            $stats['skipped'],
+            $skipReasons['no_mercator_database'],
+            $skipReasons['no_instance'],
+            $skipReasons['instance_not_computer'],
+            $skipReasons['instance_no_host_id'],
+            $skipReasons['no_logical_server'],
+        ));
 
         return $stats;
     }
@@ -1108,6 +1162,8 @@ class GlpiSyncService
 
         if ($match !== null) {
             Log::debug("{$logPrefix} {$itemType} #{$itemsId} résolu via nom : {$name}");
+        } else {
+            Log::debug("{$logPrefix} {$itemType} #{$itemsId} (nom : {$name}) : aucune correspondance ext_refs ni nom côté Mercator");
         }
 
         return $match;

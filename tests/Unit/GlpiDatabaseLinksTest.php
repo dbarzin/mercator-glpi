@@ -241,6 +241,43 @@ it('résout l\'hôte via getItem (pas getItems) sur DatabaseInstance, dédupliqu
     expect($stats['updated'])->toBe(2);
 });
 
+it('une DatabaseInstance en échec (getItem qui lève) ne fait pas planter tout le run, seule la base concernée est ignorée', function () {
+    $updated = [];
+    $mercator = databaseLinksMercatorMock(
+        [
+            ['id' => 500, 'name' => 'db-a', 'ext_refs' => '{GLPI}1'],
+            ['id' => 501, 'name' => 'db-b', 'ext_refs' => '{GLPI}2'],
+        ],
+        [['id' => 300, 'name' => 'srv-01', 'ext_refs' => '{GLPI}56']],
+    );
+    $mercator->shouldReceive('update')->andReturnUsing(function (string $ep, int $id, array $payload) use (&$updated) {
+        $updated[$id] = $payload;
+
+        return [];
+    });
+
+    $glpi = Mockery::mock(GlpiClientInterface::class);
+    $glpi->shouldReceive('getItems')
+        ->with('Database', Mockery::type('array'))
+        ->andReturn([
+            ['id' => 1, 'name' => 'db-a', 'databaseinstances_id' => 10],
+            ['id' => 2, 'name' => 'db-b', 'databaseinstances_id' => 11],
+        ]);
+    $glpi->shouldReceive('getItem')
+        ->with('DatabaseInstance', 10, Mockery::type('array'))
+        ->andThrow(new RuntimeException('404 introuvable'));
+    $glpi->shouldReceive('getItem')
+        ->with('DatabaseInstance', 11, Mockery::type('array'))
+        ->andReturn(['id' => 11, 'itemtype' => 'Computer', 'items_id' => 56]);
+
+    $stats = (new GlpiSyncService)->syncDatabaseLinks($glpi, $mercator);
+
+    expect($stats['errors'])->toBe(0);
+    expect($stats['skipped'])->toBe(1);
+    expect($stats['updated'])->toBe(1);
+    expect($updated[501]['logical_servers'])->toBe([300]);
+});
+
 it('compte une erreur PUT et continue pour les databases suivantes', function () {
     $updated = [];
     $mercator = databaseLinksMercatorMock(

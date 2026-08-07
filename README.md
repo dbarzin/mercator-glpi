@@ -992,6 +992,27 @@ LOG_LEVEL=debug php application glpi:sync --type=appliance_links
 grep "\[appliance_links\]" storage/logs/laravel.log
 ```
 
+#### Aucun lien database↔serveur logique créé (`database_links`)
+
+Prérequis :
+1. `databases` et `logical_servers` doivent avoir été synchronisés au préalable (catalogue de databases et de serveurs logiques Mercator taguées `{GLPI}`)
+2. Chaque `Database` GLPI doit avoir une `DatabaseInstance` parente (`databaseinstances_id` renseigné) elle-même rattachée à un `Computer` (onglet "Éléments liés" de la Database — la `DatabaseInstance` doit apparaître sous un `Computer`, pas sous un autre itemtype)
+3. Ce `Computer` hôte doit être routé vers `logical-servers` via `GLPI_COMPUTER_TYPES_LOGICAL_SERVERS` (un hôte synchronisé comme `physical-servers` n'est **pas** lié, cf. limitation ci-dessus)
+
+`database_links` journalise, au niveau `info` (donc **sans** avoir besoin de `LOG_LEVEL=debug`), une ligne de répartition des bases ignorées par cause exacte (`sans database Mercator`, `sans instance résolue`, `hôte non-Computer`, `instance sans hôte`, `hôte sans serveur logique Mercator`) — c'est le premier réflexe pour savoir où la chaîne casse :
+
+```bash
+php application glpi:sync --type=databases --type=database_links
+grep "\[database_links\] Répartition" storage/logs/laravel.log
+```
+
+Pour le détail base par base (id GLPI, id Mercator résolu, `itemtype`/`items_id` bruts de chaque `DatabaseInstance`, méthode de résolution ext_refs/nom…) :
+
+```bash
+LOG_LEVEL=debug php application glpi:sync --type=databases --type=database_links
+grep "\[database_links\]" storage/logs/laravel.log
+```
+
 #### Aucun lien VM ↔ serveur physique créé (`GLPI_SYNC_VM_LINKS`)
 
 Prérequis :
