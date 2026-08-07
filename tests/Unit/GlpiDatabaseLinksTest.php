@@ -7,8 +7,12 @@ use Mockery\MockInterface;
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 // Une Database GLPI ne porte ni son type ni son hôte directement : les deux vivent
-// sur la DatabaseInstance parente (databaseinstances_id → itemtype/items_id). Le
-// mock reflète ce format (expand_dropdowns=0 pour les deux collections, cf. issue #8).
+// sur la DatabaseInstance parente (databaseinstances_id → itemtype/items_id).
+// itemtype/items_id ne sont PAS renvoyés par la collection DatabaseInstance
+// (getItems) — seuls les champs d'affichage par défaut de cet itemtype le sont —
+// syncDatabaseLinks() les résout donc via getItem() (item par item, enregistrement
+// brut complet). Le mock reflète ce comportement : getItems('DatabaseInstance', …)
+// n'est jamais attendu, seul getItem('DatabaseInstance', $id, …) l'est.
 
 function databaseLinksGlpiMock(array $databases, array $instances, array $computerNames = []): MockInterface
 {
@@ -18,9 +22,14 @@ function databaseLinksGlpiMock(array $databases, array $instances, array $comput
         ->with('Database', Mockery::type('array'))
         ->andReturn($databases);
 
-    $mock->shouldReceive('getItems')
-        ->with('DatabaseInstance', Mockery::type('array'))
-        ->andReturn($instances);
+    $mock->shouldNotReceive('getItems')->with('DatabaseInstance', Mockery::any());
+
+    foreach ($instances as $instance) {
+        $mock->shouldReceive('getItem')
+            ->with('DatabaseInstance', $instance['id'], Mockery::type('array'))
+            ->zeroOrMoreTimes()
+            ->andReturn($instance);
+    }
 
     foreach ($computerNames as $id => $name) {
         $mock->shouldReceive('getItem')
@@ -202,6 +211,34 @@ it('ne fait aucune écriture en mode dry-run mais reflète les stats', function 
     $stats = (new GlpiSyncService)->syncDatabaseLinks($glpi, $mercator, dryRun: true);
 
     expect($stats['updated'])->toBe(1);
+});
+
+it('résout l\'hôte via getItem (pas getItems) sur DatabaseInstance, dédupliqué par instance', function () {
+    $mercator = databaseLinksMercatorMock(
+        [
+            ['id' => 500, 'name' => 'db-a', 'ext_refs' => '{GLPI}1'],
+            ['id' => 501, 'name' => 'db-b', 'ext_refs' => '{GLPI}2'],
+        ],
+        [['id' => 300, 'name' => 'srv-01', 'ext_refs' => '{GLPI}55']],
+    );
+    $mercator->shouldReceive('update')->andReturn([]);
+
+    $glpi = Mockery::mock(GlpiClientInterface::class);
+    $glpi->shouldReceive('getItems')
+        ->with('Database', Mockery::type('array'))
+        ->andReturn([
+            ['id' => 1, 'name' => 'db-a', 'databaseinstances_id' => 10],
+            ['id' => 2, 'name' => 'db-b', 'databaseinstances_id' => 10],
+        ]);
+    $glpi->shouldNotReceive('getItems')->with('DatabaseInstance', Mockery::any());
+    $glpi->shouldReceive('getItem')
+        ->with('DatabaseInstance', 10, Mockery::type('array'))
+        ->once()
+        ->andReturn(['id' => 10, 'itemtype' => 'Computer', 'items_id' => 55]);
+
+    $stats = (new GlpiSyncService)->syncDatabaseLinks($glpi, $mercator);
+
+    expect($stats['updated'])->toBe(2);
 });
 
 it('compte une erreur PUT et continue pour les databases suivantes', function () {

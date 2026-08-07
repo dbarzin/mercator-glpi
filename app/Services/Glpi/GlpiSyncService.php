@@ -772,13 +772,22 @@ class GlpiSyncService
         // pour la jointure ci-dessous (cf. issue #8).
         $databases = $glpi->getItems('Database', ['range' => '0-999', 'expand_dropdowns' => 0]);
 
-        // expand_dropdowns=0 : items_id doit rester l'id GLPI numérique de l'hôte
-        // (cf. issue #8) — la valeur par défaut (1) l'expanse en nom.
-        $instances = $glpi->getItems('DatabaseInstance', ['range' => '0-999', 'expand_dropdowns' => 0]);
-
+        // La collection DatabaseInstance (getItems) ne renvoie que les champs
+        // d'affichage par défaut de cet itemtype — itemtype/items_id (la référence
+        // polymorphe vers l'hôte) n'en font pas partie et sont alors silencieusement
+        // absents, ce qui fait échouer TOUTE résolution d'hôte (cf. WorkstationSyncHandler
+        // ::glpiDetailParams() : « la requête de collection n'est pas fiable »). getItem()
+        // (item par item) renvoie l'enregistrement brut complet, itemtype/items_id inclus
+        // — un seul appel par instance réellement référencée, dédupliqué.
         $instancesById = [];
-        foreach ($instances as $instance) {
-            $instancesById[(int) $instance['id']] = $instance;
+        foreach ($databases as $database) {
+            $instanceId = (int) ($database['databaseinstances_id'] ?? 0);
+
+            if ($instanceId === 0 || array_key_exists($instanceId, $instancesById)) {
+                continue;
+            }
+
+            $instancesById[$instanceId] = $glpi->getItem('DatabaseInstance', $instanceId, ['expand_dropdowns' => 0]);
         }
 
         $dbItems = $mercator->getAll('databases');
@@ -790,9 +799,9 @@ class GlpiSyncService
         $lsIndex = $this->buildMercatorIndexes($logicalServerItems, '{GLPI}');
 
         Log::info(sprintf(
-            '[database_links] %d databases GLPI, %d instances GLPI, %d databases Mercator, %d serveurs logiques Mercator',
+            '[database_links] %d databases GLPI, %d instances GLPI résolues, %d databases Mercator, %d serveurs logiques Mercator',
             count($databases),
-            count($instances),
+            count($instancesById),
             count($dbItems),
             count($logicalServerItems),
         ));

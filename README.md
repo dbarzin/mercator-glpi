@@ -614,6 +614,8 @@ Pour chaque `Database` GLPI ayant une database Mercator correspondante, résout 
 
 Source GLPI : `Database.databaseinstances_id → DatabaseInstance.itemtype/items_id`. La correspondance database ↔ database Mercator et Computer (hôte) ↔ serveur logique se fait via `ext_refs` (`{GLPI}<id>`) en priorité, nom en repli (repli nécessitant un appel GLPI complémentaire pour l'hôte, cf. note sur `activity_links` plus haut).
 
+> **`itemtype`/`items_id` résolus via `getItem`, pas `getItems`** : la collection `DatabaseInstance` (`getItems`) ne renvoie que les champs d'affichage par défaut de cet itemtype dans GLPI — `itemtype`/`items_id` (la référence polymorphe vers l'hôte) n'en font pas partie et sont silencieusement absents de la réponse (`itemtype` ne vaut alors jamais `Computer`, aucune base n'est jamais liée). Chaque `DatabaseInstance` réellement référencée par une `Database` est donc résolue individuellement via `getItem('DatabaseInstance', id)` (enregistrement brut complet), dédupliqué par instance — la collection GLPI est connue pour omettre ainsi des champs non affichés par défaut (même constat que pour `with_networkports`/`with_disks`… sur `Computer`, cf. section Postes de travail plus haut).
+
 **Limitation — hôtes serveur physique non supportés** : `App\Models\Database` (Mercator) n'expose qu'un pivot `logicalServers()`, pas de pivot vers `physical-servers`. Une `DatabaseInstance` dont l'hôte (`itemtype`) n'est pas `Computer`, ou dont le `Computer` hôte a été synchronisé comme serveur **physique** plutôt que logique, est ignorée (log debug), sans compter comme erreur.
 
 **Prérequis** :
