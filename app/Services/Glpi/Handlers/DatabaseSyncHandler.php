@@ -2,12 +2,13 @@
 
 namespace App\Services\Glpi\Handlers;
 
+use App\Services\Glpi\Contracts\DisablesNameFallbackMatching;
 use App\Services\Glpi\Contracts\SupportsDatabaseInstanceResolution;
 use App\Services\Glpi\Contracts\SyncHandler;
 use App\Services\Glpi\Mappers\DatabaseMapper;
 use Illuminate\Support\Facades\Log;
 
-class DatabaseSyncHandler implements SupportsDatabaseInstanceResolution, SyncHandler
+class DatabaseSyncHandler implements DisablesNameFallbackMatching, SupportsDatabaseInstanceResolution, SyncHandler
 {
     public function __construct(private readonly DatabaseMapper $mapper) {}
 

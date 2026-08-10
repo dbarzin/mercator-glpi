@@ -2,6 +2,7 @@
 
 namespace App\Services\Glpi;
 
+use App\Services\Glpi\Contracts\DisablesNameFallbackMatching;
 use App\Services\Glpi\Contracts\GlpiClientInterface;
 use App\Services\Glpi\Contracts\SupportsBayResolution;
 use App\Services\Glpi\Contracts\SupportsCustomExtRefsTag;
@@ -195,6 +196,12 @@ class GlpiSyncService
         // La réconciliation se fait prioritairement via ext_refs ({GLPI}id) ; le nom
         // (en minuscules) ne sert que de filet de sécurité pour les items Mercator
         // pas encore tagués (migration, création manuelle déjà nommée à l'identique).
+        //
+        // Handlers DisablesNameFallbackMatching (ex. Database, cf. issue #17) : le nom
+        // GLPI n'identifie pas un item de façon unique (deux DatabaseInstance distinctes
+        // peuvent chacune porter une base "prod"), le repli par nom est donc désactivé —
+        // $mercByName reste vide, seul ext_refs fait foi.
+        $disableNameFallback = $handler instanceof DisablesNameFallbackMatching;
 
         $mercByGlpiId = [];
         $mercByName = [];
@@ -210,7 +217,9 @@ class GlpiSyncService
                 $mercByGlpiId[(string) $glpiId] = $entry;
             }
 
-            $mercByName[strtolower($item['name'])] ??= $entry;
+            if (! $disableNameFallback) {
+                $mercByName[strtolower($item['name'])] ??= $entry;
+            }
         }
 
         $context = ['buildings_map' => $buildingsMap, 'sites_map' => $sitesMap];
@@ -298,7 +307,9 @@ class GlpiSyncService
                 if ($mercId !== null) {
                     $mercEntry = ['id' => $mercId, 'name' => $glpiItem['name'], 'ext_refs' => $payload['ext_refs']];
                     $mercByGlpiId[$glpiId] = $mercEntry;
-                    $mercByName[strtolower($glpiItem['name'])] = $mercEntry;
+                    if (! $disableNameFallback) {
+                        $mercByName[strtolower($glpiItem['name'])] = $mercEntry;
+                    }
                 }
             } catch (Throwable $e) {
                 $stats['errors']++;
@@ -783,6 +794,24 @@ class GlpiSyncService
         // pour la jointure ci-dessous (cf. issue #8).
         $databases = $glpi->getItems('Database', ['range' => '0-999', 'expand_dropdowns' => 0]);
 
+        // Même filtre "is_active" que DatabaseSyncHandler::filterItem() (cf. issue #17) :
+        // les liens ne doivent porter que sur les bases retenues par --type=databases,
+        // sans quoi database_links tente de lier des bases exclues du sync principal
+        // (pas de database Mercator correspondante → "ignorée", cf. skipReasons ci-dessus).
+        if (config('glpi.sync.only_active_databases', false)) {
+            $before = count($databases);
+            $databases = array_values(array_filter($databases, function ($item) {
+                if (! array_key_exists('is_active', $item)) {
+                    Log::warning('[database_links] GLPI_SYNC_ONLY_ACTIVE_DATABASES=true mais champ is_active absent — base "'.($item['name'] ?? '?').'" conservée');
+
+                    return true;
+                }
+
+                return (int) $item['is_active'] === 1;
+            }));
+            Log::debug('[database_links] Filtre is_active : '.($before - count($databases)).' base(s) exclue(s), '.count($databases).' conservée(s)');
+        }
+
         Log::debug('[database_links] Database bruts reçus de GLPI : '.json_encode(array_map(
             fn ($d) => ['id' => $d['id'] ?? null, 'name' => $d['name'] ?? null, 'databaseinstances_id' => $d['databaseinstances_id'] ?? null],
             $databases
@@ -902,8 +931,13 @@ class GlpiSyncService
 
             try {
                 if (! $dryRun) {
+                    // $db['name'] (nom déjà stocké côté Mercator, éventuellement complété par
+                    // DatabaseMapper::padName() lors du sync principal), pas $database['name']
+                    // (nom brut GLPI) : un nom GLPI de moins de 3 caractères (ex. "bj") est
+                    // rejeté par la validation Mercator (min:3) si on le renvoie tel quel ici,
+                    // cf. issue #17.
                     $payload = [
-                        'name' => $database['name'],
+                        'name' => $db['name'],
                         'logical_servers' => [$ls['id']],
                     ];
 

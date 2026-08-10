@@ -316,3 +316,57 @@ it('compte une erreur PUT et continue pour les databases suivantes', function ()
     expect($stats['updated'])->toBe(1);
     expect($updated[501]['logical_servers'])->toBe([301]);
 });
+
+it('envoie le nom Mercator (déjà complété) plutôt que le nom GLPI brut, trop court, dans le payload de lien', function () {
+    // DatabaseMapper::padName() complète les noms GLPI < 3 caractères ("bj" → "bj_")
+    // lors du sync principal (--type=databases) : la base Mercator porte donc "bj_",
+    // pas "bj". Si syncDatabaseLinks renvoyait le nom GLPI brut, Mercator rejetterait
+    // le PUT (validation "name" min:3, cf. issue #17).
+    $updated = [];
+    $mercator = databaseLinksMercatorMock(
+        [['id' => 500, 'name' => 'bj_', 'ext_refs' => '{GLPI}1']],
+        [['id' => 300, 'name' => 'srv-01', 'ext_refs' => '{GLPI}55']],
+    );
+    $mercator->shouldReceive('update')->andReturnUsing(function (string $ep, int $id, array $payload) use (&$updated) {
+        $updated[$id] = $payload;
+
+        return [];
+    });
+
+    $glpi = databaseLinksGlpiMock(
+        databases: [['id' => 1, 'name' => 'bj', 'databaseinstances_id' => 10]],
+        instances: [['id' => 10, 'itemtype' => 'Computer', 'items_id' => 55]],
+    );
+
+    (new GlpiSyncService)->syncDatabaseLinks($glpi, $mercator);
+
+    expect($updated[500])->toBe(['name' => 'bj_', 'logical_servers' => [300]]);
+});
+
+it('applique le filtre is_active (GLPI_SYNC_ONLY_ACTIVE_DATABASES) aux liens comme au sync principal', function () {
+    // cf. issue #17 : sans ce filtre, database_links tente de lier des bases exclues
+    // du sync principal (--type=databases), qui n'ont donc pas de database Mercator
+    // correspondante — gaspillage d'appels et bruit dans les stats ("ignorées").
+    config(['glpi.sync.only_active_databases' => true]);
+
+    $mercator = databaseLinksMercatorMock(
+        [
+            ['id' => 500, 'name' => 'prod-db', 'ext_refs' => '{GLPI}1'],
+            ['id' => 501, 'name' => 'inactive-db', 'ext_refs' => '{GLPI}2'],
+        ],
+        [['id' => 300, 'name' => 'srv-01', 'ext_refs' => '{GLPI}55']],
+    );
+    $mercator->shouldReceive('update')->once()->andReturn([]);
+
+    $glpi = databaseLinksGlpiMock(
+        databases: [
+            ['id' => 1, 'name' => 'prod-db', 'databaseinstances_id' => 10, 'is_active' => 1],
+            ['id' => 2, 'name' => 'inactive-db', 'databaseinstances_id' => 10, 'is_active' => 0],
+        ],
+        instances: [['id' => 10, 'itemtype' => 'Computer', 'items_id' => 55]],
+    );
+
+    $stats = (new GlpiSyncService)->syncDatabaseLinks($glpi, $mercator);
+
+    expect($stats['updated'])->toBe(1);
+});
