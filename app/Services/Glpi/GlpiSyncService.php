@@ -203,6 +203,14 @@ class GlpiSyncService
         // $mercByName reste vide, seul ext_refs fait foi.
         $disableNameFallback = $handler instanceof DisablesNameFallbackMatching;
 
+        // Noms déjà pris côté Mercator (tous items du endpoint, tagués {GLPI} ou non) :
+        // pour les handlers DisablesNameFallbackMatching, sert à détecter — et éviter —
+        // les collisions de nom lors d'une CREATE (Mercator rejette les doublons de nom
+        // avec un 422 "already been taken", cf. issue #17 : deux Database GLPI distinctes,
+        // par exemple sur deux DatabaseInstance différentes, peuvent légitimement porter
+        // le même nom "glpi").
+        $reservedNames = [];
+
         $mercByGlpiId = [];
         $mercByName = [];
         foreach ($mercatorItems as $item) {
@@ -219,6 +227,8 @@ class GlpiSyncService
 
             if (! $disableNameFallback) {
                 $mercByName[strtolower($item['name'])] ??= $entry;
+            } else {
+                $reservedNames[strtolower($item['name'])] = true;
             }
         }
 
@@ -254,6 +264,26 @@ class GlpiSyncService
             try {
                 $payload = $handler->map($glpiItem, $context);
                 $payload['ext_refs'] = $this->buildExtRefs($existing['ext_refs'] ?? null, $glpiItem['id'], $extRefsTag);
+
+                // Désambiguïsation du nom (handlers DisablesNameFallbackMatching, cf.
+                // issue #17) : le nom GLPI n'identifie pas un item de façon unique côté
+                // GLPI, mais Mercator, lui, exige un nom unique sur tout le endpoint — une
+                // CREATE (ou un renommage lors d'une UPDATE) vers un nom déjà pris par un
+                // AUTRE enregistrement échouerait sinon avec un 422 "already been taken".
+                // L'id GLPI (unique au sein de l'itemtype) suffit à lever la collision sans
+                // appel API supplémentaire.
+                if ($disableNameFallback && isset($payload['name'])) {
+                    $ownCurrentName = $existing !== null ? strtolower($existing['name']) : null;
+                    $desiredLower = strtolower($payload['name']);
+
+                    if ($desiredLower !== $ownCurrentName && isset($reservedNames[$desiredLower])) {
+                        $payload['name'] .= " ({$glpiItem['id']})";
+                        $desiredLower = strtolower($payload['name']);
+                        Log::warning("[{$endpoint}] Collision de nom évitée pour {$glpiItem['name']} (GLPI #{$glpiItem['id']}) → renommé \"{$payload['name']}\"");
+                    }
+
+                    $reservedNames[$desiredLower] = true;
+                }
 
                 // Pas de troncature : ce log n'est émis qu'en LOG_LEVEL=debug (opt-in) et
                 // sert justement à inspecter des champs en fin de payload (cpu, memory, disk…).

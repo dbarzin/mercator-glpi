@@ -102,3 +102,40 @@ it('ne réconcilie pas une Database GLPI sur un enregistrement Mercator homonyme
     expect($updated[0]['id'])->toBe(500);
     expect($updated[0]['payload'])->toBe(['name' => '[OLD] prod']);
 });
+
+it('désambiguïse le nom d\'une Database GLPI en collision avec une Database Mercator déjà taguée {GLPI} sous un autre id', function () {
+    // Mercator exige un nom unique sur tout le endpoint "databases", contrairement à
+    // GLPI où deux DatabaseInstance distinctes peuvent chacune porter une base "glpi".
+    // Sans désambiguïsation, la CREATE de la seconde échouerait côté Mercator avec un
+    // 422 "attribute has already been taken" (cf. issue #17, retour après le premier
+    // correctif : la fusion par nom ne se produit plus, mais la CREATE échoue quand
+    // même faute de nom unique).
+    $items = [
+        ['id' => 4, 'name' => 'glpi', 'databaseinstances_id' => 10],
+        ['id' => 80, 'name' => 'glpi', 'databaseinstances_id' => 20],
+    ];
+
+    $created = [];
+
+    $mercator = databaseCollisionMercatorMock([
+        ['id' => 500, 'name' => 'glpi', 'ext_refs' => '{GLPI}4'],
+    ]);
+    $mercator->shouldReceive('update')->once()->andReturn([]);
+    $mercator->shouldReceive('create')
+        ->once()
+        ->andReturnUsing(function (string $ep, array $payload) use (&$created) {
+            $created[] = $payload;
+
+            return ['id' => 999];
+        });
+
+    $handler = new DatabaseSyncHandler(new DatabaseMapper);
+
+    $stats = (new GlpiSyncService)->sync(databaseCollisionGlpiMock($items), $mercator, $handler);
+
+    expect($created)->toHaveCount(1);
+    expect($created[0]['name'])->toBe('glpi (80)');
+    expect($stats['created'])->toBe(1);
+    expect($stats['updated'])->toBe(1);
+    expect($stats['errors'])->toBe(0);
+});
