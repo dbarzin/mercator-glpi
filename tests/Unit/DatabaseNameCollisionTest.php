@@ -31,58 +31,25 @@ function databaseCollisionMercatorMock(array $databases = []): MockInterface
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
-it('crée deux enregistrements Mercator distincts pour deux Database GLPI homonymes (instances différentes)', function () {
-    // Contrairement à Software/Appliance (cf. GlpiSyncServiceTest "réconcilie deux
-    // items GLPI distincts partageant le même nom"), deux DatabaseInstance GLPI
-    // distinctes peuvent légitimement chacune porter une base nommée "prod" — ce ne
-    // sont PAS le même objet logique. Sans DisablesNameFallbackMatching, le second
-    // item se réconcilierait à tort sur l'enregistrement Mercator créé par le premier
-    // (perte silencieuse constatée en usage réel, cf. issue #17).
+it('réconcilie deux Database GLPI homonymes (instances différentes) sur un seul enregistrement Mercator, sans suffixe', function () {
+    // Deux DatabaseInstance GLPI distinctes peuvent légitimement chacune porter une
+    // base nommée "prod" (cf. issue #17). Mercator exige un nom unique par endpoint :
+    // créer un second enregistrement "prod" échouerait (422 "already been taken"). Le
+    // second item doit donc se réconcilier sur le même enregistrement que le premier,
+    // en conservant le nom GLPI tel quel (pas de suffixe d'id).
     $database = fn (int $id) => ['id' => $id, 'name' => 'prod', 'databaseinstances_id' => $id * 10];
-    $items = [$database(1), $database(2)];
-
-    $created = [];
-
-    $mercator = databaseCollisionMercatorMock();
-    $mercator->shouldReceive('create')
-        ->twice()
-        ->andReturnUsing(function (string $ep, array $payload) use (&$created) {
-            $created[] = $payload;
-
-            return ['id' => 500 + count($created)];
-        });
-    $mercator->shouldNotReceive('update');
-
-    $handler = new DatabaseSyncHandler(new DatabaseMapper);
-
-    $stats = (new GlpiSyncService)->sync(databaseCollisionGlpiMock($items), $mercator, $handler);
-
-    expect($created)->toHaveCount(2);
-    expect($stats['created'])->toBe(2);
-    expect($stats['updated'])->toBe(0);
-    expect($stats['errors'])->toBe(0);
-});
-
-it('ne réconcilie pas une Database GLPI sur un enregistrement Mercator homonyme non tagué', function () {
-    // Une base Mercator "prod" déjà présente (créée manuellement ou par une autre
-    // DatabaseInstance) et pas encore taguée {GLPI} ne doit pas être réutilisée par
-    // repli sur le nom : DisablesNameFallbackMatching l'exclut du tout, seul ext_refs
-    // fait foi pour Database. L'ancien enregistrement homonyme, non réconcilié, est
-    // alors traité comme orphelin (marqué [OLD], processOrphans() = true).
-    $items = [['id' => 1, 'name' => 'prod', 'databaseinstances_id' => 10]];
+    $items = [$database(4), $database(80)];
 
     $created = [];
     $updated = [];
 
-    $mercator = databaseCollisionMercatorMock([
-        ['id' => 500, 'name' => 'prod', 'ext_refs' => null],
-    ]);
+    $mercator = databaseCollisionMercatorMock();
     $mercator->shouldReceive('create')
         ->once()
         ->andReturnUsing(function (string $ep, array $payload) use (&$created) {
             $created[] = $payload;
 
-            return ['id' => 999];
+            return ['id' => 500];
         });
     $mercator->shouldReceive('update')
         ->andReturnUsing(function (string $ep, int $id, array $payload) use (&$updated) {
@@ -96,46 +63,97 @@ it('ne réconcilie pas une Database GLPI sur un enregistrement Mercator homonyme
     $stats = (new GlpiSyncService)->sync(databaseCollisionGlpiMock($items), $mercator, $handler);
 
     expect($created)->toHaveCount(1);
-    expect($stats['created'])->toBe(1);
-    expect($stats['marked_old'])->toBe(1);
+    expect($created[0]['name'])->toBe('prod');
     expect($updated)->toHaveCount(1);
     expect($updated[0]['id'])->toBe(500);
-    expect($updated[0]['payload'])->toBe(['name' => '[OLD] prod']);
+    expect($stats['created'])->toBe(1);
+    expect($stats['updated'])->toBe(1);
+    expect($stats['errors'])->toBe(0);
 });
 
-it('désambiguïse le nom d\'une Database GLPI en collision avec une Database Mercator déjà taguée {GLPI} sous un autre id', function () {
-    // Mercator exige un nom unique sur tout le endpoint "databases", contrairement à
-    // GLPI où deux DatabaseInstance distinctes peuvent chacune porter une base "glpi".
-    // Sans désambiguïsation, la CREATE de la seconde échouerait côté Mercator avec un
-    // 422 "attribute has already been taken" (cf. issue #17, retour après le premier
-    // correctif : la fusion par nom ne se produit plus, mais la CREATE échoue quand
-    // même faute de nom unique).
-    $items = [
-        ['id' => 4, 'name' => 'glpi', 'databaseinstances_id' => 10],
-        ['id' => 80, 'name' => 'glpi', 'databaseinstances_id' => 20],
-    ];
+it('cumule les id GLPI des Database homonymes dans ext_refs au lieu de les remplacer', function () {
+    $database = fn (int $id) => ['id' => $id, 'name' => 'prod', 'databaseinstances_id' => $id * 10];
+    $items = [$database(4), $database(80)];
 
-    $created = [];
+    $updated = [];
+
+    $mercator = databaseCollisionMercatorMock();
+    $mercator->shouldReceive('create')->once()->andReturn(['id' => 500]);
+    $mercator->shouldReceive('update')
+        ->andReturnUsing(function (string $ep, int $id, array $payload) use (&$updated) {
+            $updated[] = $payload;
+
+            return [];
+        });
+
+    $handler = new DatabaseSyncHandler(new DatabaseMapper);
+
+    (new GlpiSyncService)->sync(databaseCollisionGlpiMock($items), $mercator, $handler);
+
+    // Le premier item (id 4) crée l'enregistrement avec ext_refs "{GLPI}4" (vérifié via
+    // le payload de la CREATE, non capturé ici) ; le second (id 80) doit AJOUTER son id
+    // plutôt que remplacer — l'update reçu doit donc porter les deux tags.
+    expect($updated)->toHaveCount(1);
+    expect($updated[0]['ext_refs'])->toBe('{GLPI}4|{GLPI}80');
+});
+
+it('réconcilie une Database GLPI sur un enregistrement Mercator homonyme non tagué (repli par nom)', function () {
+    $items = [['id' => 1, 'name' => 'prod', 'databaseinstances_id' => 10]];
+
+    $updated = [];
 
     $mercator = databaseCollisionMercatorMock([
-        ['id' => 500, 'name' => 'glpi', 'ext_refs' => '{GLPI}4'],
+        ['id' => 500, 'name' => 'prod', 'ext_refs' => null],
     ]);
-    $mercator->shouldReceive('update')->once()->andReturn([]);
-    $mercator->shouldReceive('create')
-        ->once()
-        ->andReturnUsing(function (string $ep, array $payload) use (&$created) {
-            $created[] = $payload;
+    $mercator->shouldNotReceive('create');
+    $mercator->shouldReceive('update')
+        ->andReturnUsing(function (string $ep, int $id, array $payload) use (&$updated) {
+            $updated[] = compact('id', 'payload');
 
-            return ['id' => 999];
+            return [];
         });
 
     $handler = new DatabaseSyncHandler(new DatabaseMapper);
 
     $stats = (new GlpiSyncService)->sync(databaseCollisionGlpiMock($items), $mercator, $handler);
 
-    expect($created)->toHaveCount(1);
-    expect($created[0]['name'])->toBe('glpi (80)');
-    expect($stats['created'])->toBe(1);
+    expect($stats['created'])->toBe(0);
     expect($stats['updated'])->toBe(1);
-    expect($stats['errors'])->toBe(0);
+    expect($stats['marked_old'])->toBe(0);
+    expect($updated)->toHaveCount(1);
+    expect($updated[0]['id'])->toBe(500);
+    expect($updated[0]['payload']['name'])->toBe('prod');
+});
+
+it('réconcilie une Database GLPI renommée dans GLPI via l\'un quelconque de ses id GLPI cumulés dans ext_refs', function () {
+    // Enregistrement déjà fusionné lors d'un run précédent (ext_refs porte les deux id).
+    // Le second item GLPI (id 80) doit être retrouvé via son id même si, entretemps, le
+    // premier (id 4) a été renommé côté GLPI et ne partage donc plus le même nom.
+    $items = [
+        ['id' => 4, 'name' => 'prod-renamed', 'databaseinstances_id' => 40],
+        ['id' => 80, 'name' => 'prod', 'databaseinstances_id' => 800],
+    ];
+
+    $updated = [];
+
+    $mercator = databaseCollisionMercatorMock([
+        ['id' => 500, 'name' => 'prod', 'ext_refs' => '{GLPI}4|{GLPI}80'],
+    ]);
+    $mercator->shouldNotReceive('create');
+    $mercator->shouldReceive('update')
+        ->andReturnUsing(function (string $ep, int $id, array $payload) use (&$updated) {
+            $updated[] = compact('id', 'payload');
+
+            return [];
+        });
+
+    $handler = new DatabaseSyncHandler(new DatabaseMapper);
+
+    $stats = (new GlpiSyncService)->sync(databaseCollisionGlpiMock($items), $mercator, $handler);
+
+    // Les deux items GLPI se réconcilient tous les deux sur le même enregistrement 500.
+    expect($stats['created'])->toBe(0);
+    expect($updated)->toHaveCount(2);
+    expect($updated[0]['id'])->toBe(500);
+    expect($updated[1]['id'])->toBe(500);
 });

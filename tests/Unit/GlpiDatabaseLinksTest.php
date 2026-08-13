@@ -370,3 +370,41 @@ it('applique le filtre is_active (GLPI_SYNC_ONLY_ACTIVE_DATABASES) aux liens com
 
     expect($stats['updated'])->toBe(1);
 });
+
+it('cumule les serveurs logiques de plusieurs Database GLPI homonymes réconciliées sur la même database Mercator en une seule mise à jour', function () {
+    // cf. issue #17, suite : deux Database GLPI nommées "prod" (instances/hôtes
+    // différents) se réconcilient désormais sur LE MÊME enregistrement Mercator
+    // (SupportsMultipleGlpiIds) — leurs serveurs logiques hôtes doivent donc être
+    // cumulés dans un seul PUT, pas s'écraser l'un l'autre au fil de la boucle.
+    $updated = [];
+    $mercator = databaseLinksMercatorMock(
+        [['id' => 500, 'name' => 'prod', 'ext_refs' => '{GLPI}4|{GLPI}80']],
+        [
+            ['id' => 300, 'name' => 'srv-a', 'ext_refs' => '{GLPI}55'],
+            ['id' => 301, 'name' => 'srv-b', 'ext_refs' => '{GLPI}56'],
+        ],
+    );
+    $mercator->shouldReceive('update')->once()->andReturnUsing(function (string $ep, int $id, array $payload) use (&$updated) {
+        $updated[$id] = $payload;
+
+        return [];
+    });
+
+    $glpi = databaseLinksGlpiMock(
+        databases: [
+            ['id' => 4, 'name' => 'prod', 'databaseinstances_id' => 40],
+            ['id' => 80, 'name' => 'prod', 'databaseinstances_id' => 800],
+        ],
+        instances: [
+            ['id' => 40, 'itemtype' => 'Computer', 'items_id' => 55],
+            ['id' => 800, 'itemtype' => 'Computer', 'items_id' => 56],
+        ],
+    );
+
+    $stats = (new GlpiSyncService)->syncDatabaseLinks($glpi, $mercator);
+
+    expect($updated)->toHaveCount(1);
+    expect($updated[500])->toBe(['name' => 'prod', 'logical_servers' => [300, 301]]);
+    expect($stats['updated'])->toBe(1);
+    expect($stats['errors'])->toBe(0);
+});
