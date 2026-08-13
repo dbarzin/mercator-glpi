@@ -7,3 +7,4 @@
 vendor/
 storage/logs/*.log
 .editorconfig
+CLAUDE.md
