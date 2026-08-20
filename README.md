@@ -122,42 +122,47 @@ L'API REST GLPI doit être activée et les tokens configurés (voir [Configurati
 
 ## Installation
 
-```bash
-# 1. Cloner le dépôt
-git clone https://github.com/dbarzin/mercator-glpi
-cd mercator-glpi
+### Où installer le connecteur ?
 
-# 2. Installer les dépendances
-composer install --no-dev --optimize-autoloader
+`mercator-glpi` est une **application PHP en ligne de commande autonome** (Laravel Zero).
+Ce n'est ni un plugin GLPI, ni un module Mercator : il n'embarque aucun fichier de
+Mercator et ne dépend d'aucun code de Mercator ou de GLPI. Il dialogue avec les deux
+**exclusivement via leurs API REST** (HTTP).
 
-# 3. Copier et compléter la configuration
-cp .env.sample .env
-# Renseignez les valeurs dans .env (voir section Configuration)
-```
+Concrètement, cela veut dire :
 
-### GLPI en Docker (développement / test)
+- **Il n'a pas d'interface web** → inutile de le placer dans `/var/www`.
+- **Il s'installe dans son propre répertoire**, n'importe où sur une machine disposant de
+  PHP 8.2+ (ex. `/opt/mercator-glpi`).
+- **Il n'a pas besoin d'être co-localisé** avec Mercator ni avec GLPI. Il lui suffit de
+  pouvoir **joindre les deux API par le réseau** et de disposer des identifiants/tokens
+  correspondants (voir [Configuration](#configuration)).
 
-Un stack Docker est fourni pour tester contre une instance GLPI locale :
+Vous pouvez donc l'installer indifféremment :
 
-```bash
-./glpi.sh start    # Démarre GLPI sur http://localhost:8080
-./glpi.sh status   # Affiche l'état des conteneurs
-./glpi.sh logs     # Consulte les logs en temps réel
-./glpi.sh stop     # Arrête les conteneurs (conservés, pas de réinstallation au redémarrage)
-./glpi.sh down     # Supprime les conteneurs (les volumes/données sont conservés)
-./glpi.sh update   # Force la mise à jour vers la dernière version de GLPI
-```
+- sur le serveur Mercator,
+- sur le serveur GLPI,
+- ou sur une troisième machine (serveur d'ordonnancement, VM d'administration…),
 
-`stop` conserve les conteneurs (contrairement à `down`) : le code de GLPI vit hors des volumes persistants (`files`/`plugins`/`config`), donc un `down` suivi d'un `start` le retélécharge entièrement au prochain démarrage, ce qui peut déclencher une mise à jour GLPI non désirée et invalider le jeton d'API applicatif. N'utilisez `down` ou `update` que lorsque vous voulez explicitement forcer une réinstallation/mise à jour.
+pourvu que `MERCATOR_URL` et `GLPI_URL` y soient accessibles.
 
-Lors du premier démarrage, un wizard d'installation s'affiche dans le navigateur. Renseignez les paramètres de base de données suivants :
+> ❌ **À éviter** — les deux placements suivants ne sont **pas** nécessaires et sont source
+> de confusion : `/var/www/mercator-glpi` (pas d'interface web) et un dépôt imbriqué dans
+> le dossier `mercator/` (aucun couplage de fichiers entre les deux projets).
 
-| Champ | Valeur |
-|---|---|
-| Serveur SQL | `glpi-db` |
-| Utilisateur | `glpi` |
-| Mot de passe | `glpi` |
-| Base de données | `glpi` |
+**Topologie type :**
+
+┌──────────────┐        API REST        ┌──────────────┐
+│ GLPI         │◄───────(lecture)───────│              │
+│ (source de   │                        │ mercator-glpi│ ← app CLI, ex. /opt/mercator-glpi
+│ vérité)      │                        │ (cron/CLI)   │ n'importe où avec PHP 8.2+
+└──────────────┘                        │              │
+                                        └──────┬───────┘
+┌──────────────┐ API REST                      │
+│ Mercator     │◄──────(écriture)──────────────┘
+│ (destination)│
+└──────────────┘
+
 
 ---
 
