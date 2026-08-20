@@ -152,6 +152,7 @@ pourvu que `MERCATOR_URL` et `GLPI_URL` y soient accessibles.
 
 **Topologie type :**
 
+```
 ┌──────────────┐        API REST        ┌──────────────┐
 │ GLPI         │◄───────(lecture)───────│              │
 │ (source de   │                        │ mercator-glpi│ ← app CLI, ex. /opt/mercator-glpi
@@ -162,7 +163,7 @@ pourvu que `MERCATOR_URL` et `GLPI_URL` y soient accessibles.
 │ Mercator     │◄──────(écriture)──────────────┘
 │ (destination)│
 └──────────────┘
-
+```
 
 ---
 
