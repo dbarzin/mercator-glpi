@@ -8,6 +8,8 @@ set -euo pipefail
 
 COMPOSE_FILE="$(dirname "$(realpath "$0")")/docker-compose.mercator.yml"
 PROJECT_NAME="mercator"
+# Port hôte de Mercator (surcharge possible : MERCATOR_PORT=8001 ./mercator.sh start)
+DEFAULT_PORT=8000
 
 # Couleurs
 RED='\033[0;31m'
@@ -31,6 +33,57 @@ compose() {
     docker compose -f "$COMPOSE_FILE" -p "$PROJECT_NAME" "$@"
 }
 
+port_in_use() {
+    ss -ltnH "sport = :$1" 2>/dev/null | grep -q .
+}
+
+# Port actuellement publié par le conteneur (vide s'il ne tourne pas)
+published_port() {
+    # "|| true" : compose port échoue si le conteneur ne tourne pas, ce qui
+    # interromprait le script (set -e + pipefail).
+    compose port mercator 8080 2>/dev/null | awk -F: 'NF{print $NF}' || true
+}
+
+# Choisit le port hôte : MERCATOR_PORT si défini, sinon le port déjà publié,
+# sinon le premier port libre à partir de DEFAULT_PORT.
+resolve_port() {
+    if [[ -n "${MERCATOR_PORT:-}" ]]; then
+        if port_in_use "$MERCATOR_PORT" && [[ "$(published_port)" != "$MERCATOR_PORT" ]]; then
+            echo -e "${RED}[ERROR]${NC} Le port $MERCATOR_PORT est déjà utilisé."
+            exit 1
+        fi
+        return
+    fi
+    local current
+    current=$(published_port)
+    if [[ -n "$current" ]]; then
+        MERCATOR_PORT="$current"
+    else
+        MERCATOR_PORT=$DEFAULT_PORT
+        while port_in_use "$MERCATOR_PORT"; do
+            MERCATOR_PORT=$((MERCATOR_PORT + 1))
+        done
+        if [[ "$MERCATOR_PORT" != "$DEFAULT_PORT" ]]; then
+            echo -e "${YELLOW}[WARN]${NC} Port $DEFAULT_PORT occupé, utilisation du port $MERCATOR_PORT."
+        fi
+    fi
+    export MERCATOR_PORT
+}
+
+# Données de démo uniquement au premier démarrage : le seeder de Mercator
+# vide les tables avant de les remplir et échoue dès que la base contient
+# des données liées (ex. applications créées par la synchro GLPI).
+resolve_demo_data() {
+    if [[ -z "${MERCATOR_DEMO_DATA:-}" ]]; then
+        if docker volume inspect "${PROJECT_NAME}_mercator_db" >/dev/null 2>&1; then
+            MERCATOR_DEMO_DATA=0
+        else
+            MERCATOR_DEMO_DATA=1
+        fi
+    fi
+    export MERCATOR_DEMO_DATA
+}
+
 print_header() {
     echo -e "${CYAN}========================================${NC}"
     echo -e "${CYAN}  Mercator Docker Manager${NC}"
@@ -44,6 +97,8 @@ print_header() {
 cmd_start() {
     check_compose_file
     print_header
+    resolve_port
+    resolve_demo_data
     echo -e "${YELLOW}» Démarrage du stack Mercator...${NC}"
     compose up -d --remove-orphans
     echo ""
@@ -83,6 +138,8 @@ cmd_update() {
     echo -e "${YELLOW}  Les conteneurs vont être recréés ; les migrations de base de${NC}"
     echo -e "${YELLOW}  données sont appliquées automatiquement au démarrage.${NC}"
     compose pull
+    resolve_port
+    resolve_demo_data
     compose down
     compose up -d --remove-orphans --force-recreate
     echo ""
@@ -143,18 +200,9 @@ cmd_logs() {
 }
 
 cmd_url() {
-    # Lire le port exposé depuis le compose file (port hôte de Mercator)
     local port
-    port=$(grep -A2 'ports:' "$COMPOSE_FILE" \
-        | grep -oP '(?<=- ")[0-9]+(?=:8080")' \
-        | head -1 2>/dev/null || echo "")
-
-    # Fallback si pas trouvé par grep (format sans guillemets)
-    if [[ -z "$port" ]]; then
-        port=$(grep -A2 'ports:' "$COMPOSE_FILE" \
-            | grep -oP '[0-9]+(?=:8080)' \
-            | head -1 2>/dev/null || echo "8000")
-    fi
+    port=$(published_port)
+    port="${port:-${MERCATOR_PORT:-$DEFAULT_PORT}}"
 
     echo -e "${CYAN}--- Accès ---${NC}"
     echo -e "  URL      : ${GREEN}http://localhost:${port}${NC}"
