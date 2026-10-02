@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Services\Glpi\Contracts\GlpiClientInterface;
 use App\Services\Glpi\GlpiClient;
 use App\Services\Glpi\GlpiSyncService;
+use App\Services\Glpi\GlpiV2Client;
 use App\Services\Glpi\Handlers\ApplianceSyncHandler;
 use App\Services\Glpi\Handlers\ApplicationSyncHandler;
 use App\Services\Glpi\Handlers\CertificateSyncHandler;
@@ -53,13 +54,15 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         // Clients HTTP
-        $this->app->singleton(GlpiClientInterface::class, fn () => new GlpiClient(config('glpi.glpi'))
+        // GLPI_API_VERSION=v1 conserve l'ancien client (apirest.php) pour GLPI 10.
+        $this->app->singleton(GlpiClientInterface::class, fn () => config('glpi.glpi.api_version') === 'v1'
+            ? new GlpiClient(config('glpi.glpi'))
+            : new GlpiV2Client(config('glpi.glpi'))
         );
 
         $this->app->singleton(MercatorClientInterface::class, fn () => new MercatorClient(config('glpi.mercator'))
         );
 
-        $this->app->alias(GlpiClientInterface::class, GlpiClient::class);
         $this->app->alias(MercatorClientInterface::class, MercatorClient::class);
 
         // Mappers

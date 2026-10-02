@@ -163,8 +163,9 @@ cmd_url() {
 
     echo -e "${CYAN}--- Accès ---${NC}"
     echo -e "  URL      : ${GREEN}http://localhost:${port}${NC}"
-    echo -e "  API REST : ${GREEN}http://localhost:${port}/apirest.php${NC}"
-    echo -e "  API Doc  : ${GREEN}http://localhost:${port}/apirest.php/initSession${NC}"
+    echo -e "  API v2   : ${GREEN}http://localhost:${port}/api.php/v2${NC}"
+    echo -e "  API Doc  : ${GREEN}http://localhost:${port}/api.php/doc${NC}"
+    echo -e "  API v1   : ${GREEN}http://localhost:${port}/apirest.php${NC} (legacy)"
 }
 
 cmd_help() {

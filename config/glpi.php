@@ -8,6 +8,16 @@ return [
 
     'glpi' => [
         'url' => env('GLPI_URL'),
+        // Version de l'API GLPI : "v2" (High-Level API, GLPI ≥ 11, OAuth2 — défaut) ou
+        // "v1" (apirest.php, jetons App-Token/user_token — GLPI 10 et antérieurs).
+        'api_version' => env('GLPI_API_VERSION', 'v2'),
+        // API v2 : client OAuth GLPI (Configuration > Clients OAuth) + compte GLPI
+        'client_id' => env('GLPI_CLIENT_ID'),
+        'client_secret' => env('GLPI_CLIENT_SECRET'),
+        'username' => env('GLPI_USERNAME'),
+        'password' => env('GLPI_PASSWORD'),
+        'scope' => env('GLPI_OAUTH_SCOPE', 'api graphql'),
+        // API v1 (legacy)
         'app_token' => env('GLPI_APP_TOKEN'),
         'user_token' => env('GLPI_USER_TOKEN'),
         'entity_id' => filled(env('GLPI_ENTITY_ID')) ? (int) env('GLPI_ENTITY_ID') : null,

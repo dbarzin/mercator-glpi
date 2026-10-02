@@ -1,0 +1,77 @@
+# =============================================================================
+# docker-compose.mercator.yml — Stack Mercator pour développement / test
+# Usage : ./mercator.sh start | stop | status | logs | url
+# =============================================================================
+
+services:
+
+  mercator:
+    image: ghcr.io/sourcentis/mercator:latest
+    container_name: mercator-app
+    restart: unless-stopped
+    ports:
+      - "${MERCATOR_PORT:-8000}:8080"
+    environment:
+      APP_ENV: local
+      APP_DEBUG: "false"
+      APP_FORCE_HTTPS: "false"
+      APP_URL: http://localhost:${MERCATOR_PORT:-8000}
+      # Clé fixe : évite une régénération (et l'invalidation des sessions)
+      # à chaque recréation du conteneur. Usage local uniquement.
+      APP_KEY: "base64:Gi9+piBw4lwllknSCWGZ7wACshbt3u4adzUA2Ju3j9g="
+      DB_CONNECTION: mariadb
+      DB_HOST: mercator-db
+      DB_PORT: 3306
+      DB_DATABASE: mercator
+      DB_USERNAME: mercator
+      DB_PASSWORD: mercator
+      CACHE_DRIVER: file
+      SESSION_DRIVER: file
+      # Limiteur de débit de l'API (défaut Mercator : 60 req/min, vite dépassé par
+      # une synchro complète du connecteur → HTTP 429 "Too Many Attempts").
+      API_RATE_LIMIT: "${MERCATOR_API_RATE_LIMIT:-600}"
+      API_RATE_LIMIT_DECAY: 1
+      # Données de démo + compte admin (admin@admin.com / password).
+      # Le seeder échoue sur une base non vide : mercator.sh ne l'active
+      # qu'au premier démarrage (volume MariaDB absent).
+      USE_DEMO_DATA: "${MERCATOR_DEMO_DATA:-0}"
+      TZ: Europe/Luxembourg
+    volumes:
+      - mercator_docs:/var/www/mercator/storage/docs
+      - mercator_app:/var/www/mercator/storage/app
+    depends_on:
+      mercator-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "php", "-r", "exit(@file_get_contents('http://localhost:8080/login') === false ? 1 : 0);"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+  mercator-db:
+    image: mariadb:11
+    container_name: mercator-db
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: root_secret
+      MARIADB_DATABASE: mercator
+      MARIADB_USER: mercator
+      MARIADB_PASSWORD: mercator
+      TZ: Europe/Luxembourg
+    volumes:
+      - mercator_db:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+volumes:
+  mercator_docs:
+    driver: local
+  mercator_app:
+    driver: local
+  mercator_db:
+    driver: local

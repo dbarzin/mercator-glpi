@@ -15,6 +15,7 @@
 - [Configuration](#configuration)
   - [Fichier .env — référence complète](#fichier-env--référence-complète)
   - [Configuration côté GLPI](#configuration-côté-glpi)
+  - [API GLPI v2 : différences et limites](#api-glpi-v2--différences-et-limites)
   - [Configuration côté Mercator](#configuration-côté-mercator)
 - [Utilisation](#utilisation)
   - [Synchronisation complète](#synchronisation-complète)
@@ -83,7 +84,9 @@ GlpiSyncService              — Orchestration : récupération, filtrage, créa
   └── Mapper                  — Transformation champ à champ GLPI → Mercator
 VmLinkSyncService             — Liens serveur logique (VM) ↔ serveur(s) physique(s) hôte(s)
                                 (opt-in GLPI_SYNC_VM_LINKS, invoqué après logical_servers/physical_servers)
-GlpiClient                   — Client HTTP GLPI (API REST v1, session-token)
+GlpiV2Client                 — Client HTTP GLPI API v2 (High-Level API /api.php/v2, OAuth2) — défaut
+  └── V2\ItemNormalizer       — Conversion des réponses v2 dans la forme v1 attendue par les Mappers
+GlpiClient                   — Client HTTP GLPI API v1 legacy (apirest.php, session-token) — GLPI_API_VERSION=v1
 MercatorClient               — Client HTTP Mercator (API REST, Bearer token)
 ```
 
@@ -99,7 +102,7 @@ MercatorClient               — Client HTTP Mercator (API REST, Bearer token)
 
 **Champs non mappés** : les champs GLPI qui n'ont pas de champ Mercator dédié (ex. numéro de série alternatif, statut, type de baie…) sont automatiquement sérialisés à la suite de la description au format `"nom_champ" : "valeur"`. Les champs vides, nuls ou à 0 sont ignorés. Les structures complexes (`_networkports`, `_devices`…) sont également ignorées.
 
-**Pagination** : chaque `SyncHandler::glpiQueryParams()` demande une première page de 1000 items (`range=0-999`), mais `GlpiClient::getItems()` boucle automatiquement sur les pages suivantes en s'appuyant sur le header `Content-Range` renvoyé par GLPI (`start-end/total`) jusqu'à récupérer la collection complète. Aucune collection GLPI (Software, Computer…) n'est donc tronquée au-delà de 1000 items ; il n'y a pas de réglage à activer, c'est automatique.
+**Pagination** : les collections GLPI sont lues par pages de 1000 items (`start`/`limit` en API v2, `range=0-999` en v1), et `getItems()` boucle automatiquement sur les pages suivantes en s'appuyant sur le header `Content-Range` renvoyé par GLPI (`start-end/total`) jusqu'à récupérer la collection complète (même principe pour les requêtes GraphQL, via `total_count`). Aucune collection GLPI (Software, Computer…) n'est donc tronquée au-delà de 1000 items ; il n'y a pas de réglage à activer, c'est automatique.
 
 ---
 
@@ -109,12 +112,12 @@ MercatorClient               — Client HTTP Mercator (API REST, Bearer token)
 |---|---|
 | PHP | 8.2 |
 | Composer | 2.x |
-| GLPI | 10.x |
+| GLPI | 11.x (API v2) — ou 10.x avec `GLPI_API_VERSION=v1` |
 | Mercator | dernière version stable |
 | Extension PHP `curl` | — |
 | Extension PHP `json` | — |
 
-L'API REST GLPI doit être activée et les tokens configurés (voir [Configuration côté GLPI](#configuration-côté-glpi)).
+L'API GLPI doit être activée et un client OAuth configuré (voir [Configuration côté GLPI](#configuration-côté-glpi)).
 
 **Mémoire** : la commande `application` relève automatiquement `memory_limit` à 512M pour son propre process si la valeur PHP CLI configurée est inférieure (sans jamais abaisser une valeur déjà plus haute, ni toucher à une limite illimitée `-1`) — un sync complet charge en mémoire des collections GLPI entières (paginées au-delà de 1000 items, cf. [Filtrage des actifs](#filtrage-des-actifs)), ce qui peut dépasser le défaut PHP courant (souvent 128M). Ce réglage ne s'applique qu'à ce process CLI, jamais au PHP-FPM/Apache qui sert vos autres applications. Pour un très gros parc GLPI, si 512M ne suffit toujours pas, augmentez `memory_limit` dans le php.ini utilisé par la CLI (ou lancez avec `php -d memory_limit=1G application glpi:sync`).
 
@@ -176,8 +179,14 @@ Copiez `.env.sample` vers `.env` et renseignez les valeurs :
 | Variable | Défaut | Description                                                                                                                                                               | Exemple                                                |
 |---|---|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------|
 | `GLPI_URL` | — | URL de base de l'instance GLPI (sans slash final)                                                                                                                         | `http://127.0.0.1:8080` ou `https://glpi.domain.local` |
-| `GLPI_APP_TOKEN` | — | Token applicatif GLPI (Configuration → General → API → Clients de l'API → GLPI)                                                                                            | `abc123…`                                              |
-| `GLPI_USER_TOKEN` | — | Token utilisateur GLPI (Administration → Users → GLPI → Jeton d'API)                                                                                                      | `xyz789…`                                              |
+| `GLPI_API_VERSION` | `v2` | API GLPI utilisée : `v2` (High-Level API, GLPI 11+, OAuth2) ou `v1` (API REST legacy `apirest.php`, GLPI 10)                                                              | `v2`                                                   |
+| `GLPI_CLIENT_ID` | — | **v2** — Client ID du client OAuth GLPI (Configuration → Clients OAuth)                                                                                                   | `9635198…`                                             |
+| `GLPI_CLIENT_SECRET` | — | **v2** — Secret client du client OAuth GLPI                                                                                                                              | `f1e2d3…`                                              |
+| `GLPI_USERNAME` | — | **v2** — Identifiant du compte GLPI utilisé par le connecteur (grant OAuth « Mot de passe »)                                                                              | `svc-mercator`                                         |
+| `GLPI_PASSWORD` | — | **v2** — Mot de passe de ce compte                                                                                                                                       | `motdepasse`                                           |
+| `GLPI_OAUTH_SCOPE` | `api graphql` | **v2** — Scopes OAuth demandés (`graphql` est nécessaire pour les liens, ports réseau, VM — voir [API GLPI v2](#api-glpi-v2--différences-et-limites))                     | `api graphql`                                          |
+| `GLPI_APP_TOKEN` | — | **v1 uniquement** — Token applicatif GLPI (Configuration → Générale → API → Clients de l'API)                                                                           | `abc123…`                                              |
+| `GLPI_USER_TOKEN` | — | **v1 uniquement** — Token utilisateur GLPI (Mes préférences → Accès distant)                                                                                            | `xyz789…`                                              |
 | `GLPI_ENTITY_ID` | _(vide)_ | ID de l'entité GLPI à synchroniser ; vide = toutes les entités                                                                                                            | `3`                                                    |
 | `GLPI_ALLOWED_STATES` | _(vide)_ | Noms ou IDs de statuts autorisés, séparés par virgules ; vide = tous                                                                                                      | `En production,En stock`                               |
 | `GLPI_ALLOWED_STATES_COMPUTERS` | _(vide)_ | Surcharge du filtre statut pour les `Computer`                                                                                                                            | `En production`                                        |
@@ -205,26 +214,69 @@ Copiez `.env.sample` vers `.env` et renseignez les valeurs :
 
 ### Configuration côté GLPI
 
-#### 1. Activer l'API REST
+Le connecteur utilise par défaut l'**API GLPI v2** (« High-Level API », `/api.php/v2`, disponible à partir de GLPI 11). L'authentification n'utilise plus les jetons `App-Token`/`user_token` de l'API v1 : elle passe par **OAuth2**, avec un *client OAuth* déclaré dans GLPI et un compte GLPI (grant « Mot de passe »). Le connecteur obtient un jeton d'accès (valable 1 h) et le renouvelle automatiquement pendant les longues synchronisations.
+
+#### 1. Activer l'API
 
 > **Configuration → Générale → API**
-> - Activer l'API REST : **Oui**
-> - Activer la connexion avec credentials : **Oui**
+> - Section **API** : **Activer l'API** → **Oui**
+>
+> L'URL de l'API (`https://glpi.example/api.php`) et sa documentation interactive (Swagger) sont affichées sur cette même page. L'« API Legacy » (v1) n'a **pas** besoin d'être activée.
 
-#### 2. Créer l'`APP_TOKEN`
+#### 2. Créer un compte de service GLPI
 
-> **Configuration → Générale → API → Clients de l'API → Ajouter**
-> - Nom : `mercator-glpi-connector`
-> - Copiez le token généré → `GLPI_APP_TOKEN` dans `.env`
+Créez un compte GLPI dédié (ex. `svc-mercator`) avec un mot de passe, et rattachez-lui un **profil disposant des droits de lecture** sur les types synchronisés (Ordinateurs, Logiciels, Périphériques, Téléphones, Matériels réseau, Baies, Appliances, Certificats, Clusters, Domaines, Bases de données, Lieux) sur les entités concernées. Le connecteur utilise le **profil par défaut** de ce compte.
 
-#### 3. Créer le `USER_TOKEN`
+Pour la récupération des adresses IP (voir [API GLPI v2](#api-glpi-v2--différences-et-limites)), ce profil doit aussi avoir le droit de **lecture sur les Agents** (Administration → Profils → *profil* → onglet Administration → ligne *Agent* → *Lire*). ⚠️ Dans une installation standard, **seul le profil Super-Admin** a ce droit (pas même Admin) : pensez à l'ajouter au profil du compte de service. Sans lui, la synchronisation se poursuit sans IP et un avertissement est journalisé (`Agents d'inventaire illisibles`).
 
-> **Mon compte → Mes préférences → Accès distant (API) → Régénérer**
-> - Copiez le token → `GLPI_USER_TOKEN` dans `.env`
+> Ligne de commande (sur le serveur GLPI) : `php bin/console user:create svc-mercator` puis `php bin/console user:grant svc-mercator`.
 
-Le compte associé doit avoir accès en lecture aux types à synchroniser (Ordinateurs, Logiciels, Périphériques, Téléphones, Équipements réseau, Baies…).
+#### 3. Créer le client OAuth
 
-#### 4. Vérifier la connexion
+> **Configuration → Clients OAuth → Ajouter**
+> - **Nom** : `mercator-glpi`
+> - **Grants** : **Mot de passe** (*password*)
+> - **Scopes** : **api** et **graphql**
+> - Enregistrez, puis rouvrez le client : copiez **Client ID** → `GLPI_CLIENT_ID` et **Secret client** → `GLPI_CLIENT_SECRET` dans `.env`
+> - (Optionnel) restreignez **Allowed IPs** à l'adresse de la machine qui exécute le connecteur
+
+Le scope `graphql` est nécessaire : l'API v2 n'expose certaines relations (pivot `Appliance_Item`, ports réseau, logiciels installés, machines virtuelles) que via son endpoint GraphQL. Sans lui, la synchronisation des actifs fonctionne, mais les liens (`links`, `activity_links`, `appliance_links`, `vm_links`) échouent avec un message `scope OAuth manquant` et les adresses MAC/types de ports ne sont pas renseignés.
+
+#### 4. Renseigner `.env`
+
+```dotenv
+GLPI_URL=https://glpi.example
+GLPI_API_VERSION=v2
+GLPI_CLIENT_ID=<Client ID>
+GLPI_CLIENT_SECRET=<Secret client>
+GLPI_USERNAME=svc-mercator
+GLPI_PASSWORD=<mot de passe du compte>
+```
+
+#### 5. Vérifier la connexion
+
+```bash
+# Obtenir un jeton
+TOKEN=$(curl -s -X POST "$GLPI_URL/api.php/token" \
+  -d grant_type=password \
+  -d client_id="$GLPI_CLIENT_ID" -d client_secret="$GLPI_CLIENT_SECRET" \
+  -d username="$GLPI_USERNAME" -d password="$GLPI_PASSWORD" \
+  --data-urlencode "scope=api graphql" | jq -r .access_token)
+
+# Tester un appel : informations de session (utilisateur, profil, entités actives)
+curl -s -H "Authorization: Bearer $TOKEN" "$GLPI_URL/api.php/v2/session" | jq '{name, active_profile: .active_profile.name, active_entities}'
+```
+
+Puis lancez une simulation complète : `php application glpi:sync --dry-run`.
+
+#### GLPI 10 : API v1 (legacy)
+
+L'API v2 n'existe pas sur GLPI 10. Pour ces versions, conservez l'ancien mode :
+
+> 1. **Configuration → Générale → API** : activer l'API REST et la connexion avec credentials
+> 2. **Configuration → Générale → API → Clients de l'API → Ajouter** : copier le token → `GLPI_APP_TOKEN`
+> 3. **Mon compte → Mes préférences → Accès distant (API) → Régénérer** : copier le token → `GLPI_USER_TOKEN`
+> 4. Dans `.env` : `GLPI_API_VERSION=v1`
 
 ```bash
 curl -H "Authorization: user_token $GLPI_USER_TOKEN" \
@@ -232,6 +284,23 @@ curl -H "Authorization: user_token $GLPI_USER_TOKEN" \
      "$GLPI_URL/apirest.php/initSession"
 # Attendu : {"session_token": "..."}
 ```
+
+### API GLPI v2 : différences et limites
+
+Le client v2 (`GlpiV2Client`) convertit les réponses de l'API v2 dans la forme de l'API v1 (`V2\ItemNormalizer` : relations `{"id", "name"}` → colonnes `*_id`, dates ISO 8601 → `Y-m-d H:i:s`, booléens → `0/1`), si bien que les Mappers, filtres et règles de réconciliation sont strictement les mêmes. Une synchronisation comparative v1/v2 sur un même GLPI 11.0.8 produit des payloads Mercator identiques, aux différences suivantes près :
+
+| Sujet | API v1 | API v2 |
+|---|---|---|
+| Adresse IP (`address_ip`) | lue sur les ports réseau (`NetworkName`/`IPAddress`) | GLPI 11 (API 2.3) n'expose les adresses IP ni en REST ni en GraphQL. Le connecteur les lit dans le **dernier fichier d'inventaire du GLPI Agent** de l'item (`/Inventory/Agent/{id}/InventoryFile`, JSON ou XML FusionInventory) et les rattache aux ports par adresse MAC. Sont donc couverts les postes et serveurs remontés par un agent. **Non couverts** : IP saisies manuellement dans GLPI, items sans agent propre (switchs/routeurs/bornes inventoriés en SNMP, téléphones, périphériques), fichier d'inventaire absent. Dans ces cas le champ n'est pas envoyé et la valeur existante dans Mercator est conservée. |
+| Disque (`disk`) | non renseigné (format `_disks` v1 non exploité) | somme des volumes (`Volume`) |
+| Description : champs non mappés | inclut `ticket_tco "0.0000"`, `ancestors_cache`… | ces champs internes à zéro/vides disparaissent ; l'ordre des champs peut différer |
+| Filtre `GLPI_SYNC_ONLY_ACTIVE_DATABASES` | appliqué (`is_active` de `Database`) | **sans effet** : `is_active` n'est pas exposé sur `Database` en v2 (un warning est journalisé et toutes les bases sont conservées) |
+| Composants (`_devices`) | tous types | processeurs uniquement (seul composant exploité) |
+| Entité (`--entity`, `GLPI_ENTITY_ID`) | `changeActiveEntities` sur la session | en-têtes `GLPI-Entity` / `GLPI-Entity-Recursive: true` à chaque requête (respectés aussi pour `Domain`) |
+
+Contournement intégré : GLPI 11.0.8 renvoie `completename` et `level` à `null`, dans les réponses de collection, pour les lieux et entités **ayant des enfants**. Le connecteur les recalcule à partir de la chaîne des parents — indispensable pour créer les Building parents avant leurs enfants et pour le filtrage par entité.
+
+Correspondance des ressources : `Computer`, `NetworkEquipment`, `Phone`, `Peripheral`, `Rack`, `Software`, `Appliance`, `Certificate` → `/Assets/…` ; `Cluster`, `Database`, `DatabaseInstance`, `Domain` → `/Management/…` ; `Location`, `State` → `/Dropdowns/…` ; `Entity` → `/Administration/Entity` ; système d'exploitation → `/Assets/{type}/{id}/OSInstallation` ; volumes, processeurs, infos financières → sous-routes `Volume`, `Component/Processor`, `Infocom` ; `Item_Rack` → champ `items` des `Rack` ; `Appliance_Item`, ports réseau, logiciels installés, machines virtuelles → GraphQL.
 
 ### Configuration côté Mercator
 
@@ -770,7 +839,7 @@ GLPI_DOMAIN_TYPES=Interne
 
 Vide = tous les `Domain` sont acceptés, quel que soit leur `domaintypes_id`.
 
-> **Note sur `--entity`/`GLPI_ENTITY_ID` et `Domain`** : l'API GLPI ne restreint pas toujours les `Domain` retournés à l'entité active de la session, contrairement aux autres itemtypes. Le connecteur applique donc un filtrage explicite côté client pour ce type (comparaison de l'entité de chaque domaine avec l'entité configurée, y compris ses sous-entités) — aucune configuration supplémentaire n'est nécessaire, `--entity`/`GLPI_ENTITY_ID` suffit.
+> **Note sur `--entity`/`GLPI_ENTITY_ID` et `Domain`** : l'API GLPI v1 ne restreint pas toujours les `Domain` retournés à l'entité active de la session, contrairement aux autres itemtypes (l'API v2 les restreint correctement ; le filtre client reste appliqué par sécurité). Le connecteur applique donc un filtrage explicite côté client pour ce type (comparaison de l'entité de chaque domaine avec l'entité configurée, y compris ses sous-entités) — aucune configuration supplémentaire n'est nécessaire, `--entity`/`GLPI_ENTITY_ID` suffit.
 
 ### Par statut actif (Database)
 
@@ -867,23 +936,35 @@ grep "\[appliance_links\]" storage/logs/laravel.log
 
 ### Cas d'erreurs fréquents et solutions
 
-#### Authentification GLPI échoue (401)
+#### Authentification GLPI échoue
 
 ```
-Échec de l'authentification : 401
+Échec de l'authentification : Authentification GLPI (OAuth2) échouée : 401 — Client authentication failed
+Échec de l'authentification : Authentification GLPI (OAuth2) échouée : 400 — The user credentials were incorrect.
+Échec de l'authentification : Configuration GLPI API v2 incomplète : GLPI_CLIENT_ID manquant
 ```
 
-Vérifications :
-- L'API REST est activée dans GLPI (**Configuration → Générale → API**)
-- `GLPI_APP_TOKEN` et `GLPI_USER_TOKEN` sont corrects et non expirés
+Vérifications (API v2) :
+- L'API est activée dans GLPI (**Configuration → Générale → API → Activer l'API**)
+- `GLPI_CLIENT_ID` / `GLPI_CLIENT_SECRET` correspondent à un client OAuth **actif** (sinon 401 `Client authentication failed`), dont les grants incluent **Mot de passe** (sinon 400 `The authenticated client is not authorized to use this authorization grant type.`)
+- `GLPI_USERNAME` / `GLPI_PASSWORD` permettent de se connecter à GLPI avec ce compte
+- Le client OAuth autorise les scopes demandés (`GLPI_OAUTH_SCOPE`, par défaut `api graphql`). Attention : GLPI **ignore silencieusement** un scope non autorisé (le jeton est délivré sans lui) — l'erreur n'apparaît qu'aux appels suivants, en 403 « scope OAuth manquant » (cf. ci-dessous)
+- Si **Allowed IPs** est renseigné sur le client OAuth, l'adresse du connecteur y figure
+- `GLPI_URL` est l'URL racine de GLPI (le connecteur ajoute lui-même `/api.php/v2`)
 
-Test manuel :
-```bash
-curl -H "Authorization: user_token $GLPI_USER_TOKEN" \
-     -H "App-Token: $GLPI_APP_TOKEN" \
-     "$GLPI_URL/apirest.php/initSession"
-# Attendu : {"session_token": "..."}
+Test manuel : voir [Vérifier la connexion](#5-vérifier-la-connexion). En API v1 (`GLPI_API_VERSION=v1`), vérifiez `GLPI_APP_TOKEN`/`GLPI_USER_TOKEN` avec l'appel `initSession`.
+
+#### Erreur 403 « scope OAuth manquant » (API v2)
+
 ```
+Erreur lors de la récupération de GraphQL Appliance_Item : 403 — You don't have permission to perform this action. (scope OAuth manquant : le client GLPI doit autoriser « api » et « graphql »)
+```
+
+Le client OAuth GLPI n'autorise pas le scope `graphql`. Ajoutez-le dans **Configuration → Clients OAuth → (client) → Scopes**, et vérifiez que `GLPI_OAUTH_SCOPE` le contient.
+
+#### Erreur 403 sur un type d'actif (API v2)
+
+Le profil par défaut du compte `GLPI_USERNAME` n'a pas le droit de lecture sur ce type, ou sur l'entité demandée. Vérifiez le profil attribué au compte (et qu'il s'agit bien de son profil par défaut).
 
 #### Erreur 429 — « Too Many Attempts. »
 
@@ -949,9 +1030,9 @@ php application glpi:sync --type=locations
 Puis comparez les noms :
 
 ```bash
-# Noms des localisations GLPI
-curl -H "Session-Token: $SESSION" -H "App-Token: $APP_TOKEN" \
-  "$GLPI_URL/apirest.php/Location" | jq '.[].name'
+# Noms des localisations GLPI (API v2, $TOKEN obtenu comme dans « Vérifier la connexion »)
+curl -H "Authorization: Bearer $TOKEN" \
+  "$GLPI_URL/api.php/v2/Dropdowns/Location?limit=1000" | jq '.[].name'
 
 # Noms des bâtiments Mercator
 curl -H "Authorization: Bearer $TOKEN" \
@@ -1092,6 +1173,8 @@ $this->app->singleton(MonitorSyncHandler::class, fn($app) =>
 'monitors' => MonitorSyncHandler::class,
 ```
 
+**5. API v2** : déclarer la route v2 de l'itemtype dans `GlpiV2Client::RESOURCES` (`'Monitor' => 'Assets/Monitor'`) et, si besoin, la correspondance de ses relations v2 vers les colonnes v1 dans `V2\ItemNormalizer::TYPE_RELATIONS` (`'Monitor' => ['type' => 'monitortypes_id', 'model' => 'monitormodels_id']`). Le schéma exact de chaque ressource est consultable dans la documentation interactive de l'API (`$GLPI_URL/api.php/doc`).
+
 ---
 
 ## Tests
@@ -1110,7 +1193,7 @@ $this->app->singleton(MonitorSyncHandler::class, fn($app) =>
 ./vendor/bin/pest --coverage
 ```
 
-Les tests utilisent **Mockery** — aucun appel réseau réel. Les fixtures JSON réalistes se trouvent dans `tests/Fixtures/`.
+Les tests utilisent **Mockery** et `Http::fake()` — aucun appel réseau réel. Les fixtures JSON réalistes se trouvent dans `tests/Fixtures/`.
 
 | Suite | Ce qui est testé |
 |---|---|
@@ -1137,7 +1220,10 @@ Les tests utilisent **Mockery** — aucun appel réseau réel. Les fixtures JSON
 | `VmLinkSyncServiceTest` | Liens serveur logique (VM) ↔ serveur physique : détection GLPI 10/11, résolution uuid (dont endianness inversée) et nom, ambiguïtés, nettoyage |
 | `VmLinksCommandTest` (`tests/Feature/`) | Câblage `GlpiSyncCommand` ↔ `VmLinkSyncService` selon `GLPI_SYNC_VM_LINKS` et les `--type` synchronisés |
 | `GlpiEntityFilterTest` | Filtrage par entité GLPI (`--entity`, `GLPI_ENTITY_ID`) |
-| `GlpiClientPaginationTest` | Pagination automatique de `GlpiClient::getItems()` au-delà de 1000 items (`Content-Range`) |
+| `GlpiClientPaginationTest` | Pagination automatique de `GlpiClient::getItems()` (API v1) au-delà de 1000 items (`Content-Range`) |
+| `GlpiV2ClientTest` | Client API v2 : OAuth2 (grant password, renouvellement du jeton, rejeu sur 401), routage des itemtypes, pagination REST et GraphQL, en-têtes d'entité, enrichissements `with_*`, `Appliance_Item`, `Item_Rack`, VM, contournement completename/level null |
+| `GlpiV2ItemNormalizerTest` | Conversion réponse v2 → forme v1 (relations, ids/noms, chemins complets, dates, booléens, champs renommés) |
+| `GlpiV2SyncNonRegressionTest` | Non-régression bout en bout sur réponses réelles GLPI 11.0.8 (`tests/Fixtures/glpi_v2_api.json`) : payloads workstation/serveur physique identiques au mode v1, bay, hiérarchie des Building, filtre entité Domain, liens links/activity_links/database_links/vm_links |
 | `GlpiStatusFilterTest` | Filtrage par statut (`GLPI_ALLOWED_STATES*`) |
 | `ComputerTypeFilterTest` | Filtrage par sous-type Computer (`GLPI_COMPUTER_TYPES_*`) |
 | `NetworkDeviceTypeFilterTest` | Filtrage par sous-type NetworkEquipment (`GLPI_NETWORK_DEVICE_TYPES_*`) |

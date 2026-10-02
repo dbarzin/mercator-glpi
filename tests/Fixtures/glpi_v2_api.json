@@ -1,0 +1,2218 @@
+{
+ "GET Assets/Computer": {
+  "status": 200,
+  "body": [
+   {
+    "id": 1,
+    "name": "TEST-VM-01",
+    "comment": null,
+    "is_recursive": false,
+    "contact": null,
+    "contact_num": null,
+    "serial": null,
+    "otherserial": null,
+    "is_deleted": false,
+    "date_creation": "2026-07-21T09:07:21+00:00",
+    "date_mod": "2026-07-21T09:07:21+00:00",
+    "uuid": null,
+    "is_template": false,
+    "template_name": null,
+    "is_dynamic": false,
+    "ticket_tco": 0,
+    "last_inventory_update": null,
+    "last_boot": null,
+    "status": null,
+    "entity": {
+     "id": 0,
+     "name": "Entité racine",
+     "completename": "Entité racine"
+    },
+    "manufacturer": null,
+    "user": null,
+    "user_tech": null,
+    "location": null,
+    "type": null,
+    "model": null,
+    "group": [],
+    "group_tech": [],
+    "network": null,
+    "autoupdatesystem": null
+   },
+   {
+    "id": 2,
+    "name": "PC-001",
+    "comment": "Poste accueil",
+    "is_recursive": false,
+    "contact": null,
+    "contact_num": null,
+    "serial": "SN-PC-001",
+    "otherserial": null,
+    "is_deleted": false,
+    "date_creation": "2026-10-01T19:22:17+00:00",
+    "date_mod": "2026-10-01T19:22:17+00:00",
+    "uuid": null,
+    "is_template": false,
+    "template_name": null,
+    "is_dynamic": false,
+    "ticket_tco": 0,
+    "last_inventory_update": null,
+    "last_boot": null,
+    "status": {
+     "id": 1,
+     "name": "En production"
+    },
+    "entity": {
+     "id": 0,
+     "name": "Entité racine",
+     "completename": "Entité racine"
+    },
+    "manufacturer": {
+     "id": 1,
+     "name": "Dell"
+    },
+    "user": {
+     "id": 2,
+     "name": "glpi"
+    },
+    "user_tech": null,
+    "location": {
+     "id": 3,
+     "name": "Salle 101"
+    },
+    "type": {
+     "id": 1,
+     "name": "Poste de travail"
+    },
+    "model": {
+     "id": 1,
+     "name": "OptiPlex 7090"
+    },
+    "group": [],
+    "group_tech": [],
+    "network": null,
+    "autoupdatesystem": null
+   },
+   {
+    "id": 3,
+    "name": "PC-002",
+    "comment": null,
+    "is_recursive": false,
+    "contact": null,
+    "contact_num": null,
+    "serial": "SN-PC-002",
+    "otherserial": null,
+    "is_deleted": false,
+    "date_creation": "2026-10-01T19:22:32+00:00",
+    "date_mod": "2026-10-01T19:22:32+00:00",
+    "uuid": null,
+    "is_template": false,
+    "template_name": null,
+    "is_dynamic": false,
+    "ticket_tco": 0,
+    "last_inventory_update": null,
+    "last_boot": null,
+    "status": {
+     "id": 2,
+     "name": "En stock"
+    },
+    "entity": {
+     "id": 1,
+     "name": "Filiale A",
+     "completename": "Entité racine > Filiale A"
+    },
+    "manufacturer": {
+     "id": 2,
+     "name": "HP"
+    },
+    "user": null,
+    "user_tech": null,
+    "location": {
+     "id": 2,
+     "name": "Bâtiment A"
+    },
+    "type": {
+     "id": 1,
+     "name": "Poste de travail"
+    },
+    "model": null,
+    "group": [],
+    "group_tech": [],
+    "network": null,
+    "autoupdatesystem": null
+   },
+   {
+    "id": 4,
+    "name": "SRV-PHY-01",
+    "comment": null,
+    "is_recursive": false,
+    "contact": null,
+    "contact_num": null,
+    "serial": "SN-SRV-01",
+    "otherserial": null,
+    "is_deleted": false,
+    "date_creation": "2026-10-01T19:22:32+00:00",
+    "date_mod": "2026-10-01T19:22:32+00:00",
+    "uuid": null,
+    "is_template": false,
+    "template_name": null,
+    "is_dynamic": false,
+    "ticket_tco": 0,
+    "last_inventory_update": null,
+    "last_boot": null,
+    "status": {
+     "id": 1,
+     "name": "En production"
+    },
+    "entity": {
+     "id": 0,
+     "name": "Entité racine",
+     "completename": "Entité racine"
+    },
+    "manufacturer": {
+     "id": 1,
+     "name": "Dell"
+    },
+    "user": null,
+    "user_tech": null,
+    "location": {
+     "id": 5,
+     "name": "Salle serveurs"
+    },
+    "type": {
+     "id": 2,
+     "name": "Serveur physique"
+    },
+    "model": {
+     "id": 2,
+     "name": "PowerEdge R740"
+    },
+    "group": [],
+    "group_tech": [],
+    "network": null,
+    "autoupdatesystem": null
+   },
+   {
+    "id": 5,
+    "name": "VM-APP-01",
+    "comment": null,
+    "is_recursive": false,
+    "contact": null,
+    "contact_num": null,
+    "serial": null,
+    "otherserial": null,
+    "is_deleted": false,
+    "date_creation": "2026-10-01T19:22:32+00:00",
+    "date_mod": "2026-10-01T19:22:32+00:00",
+    "uuid": "4c4c4544-0042-3510-8048-b4c04f4e3132",
+    "is_template": false,
+    "template_name": null,
+    "is_dynamic": false,
+    "ticket_tco": 0,
+    "last_inventory_update": null,
+    "last_boot": null,
+    "status": {
+     "id": 1,
+     "name": "En production"
+    },
+    "entity": {
+     "id": 0,
+     "name": "Entité racine",
+     "completename": "Entité racine"
+    },
+    "manufacturer": null,
+    "user": null,
+    "user_tech": null,
+    "location": {
+     "id": 5,
+     "name": "Salle serveurs"
+    },
+    "type": {
+     "id": 3,
+     "name": "Serveur virtuel"
+    },
+    "model": null,
+    "group": [],
+    "group_tech": [],
+    "network": null,
+    "autoupdatesystem": null
+   },
+   {
+    "id": 6,
+    "name": "PC-AGENT-01",
+    "comment": null,
+    "is_recursive": false,
+    "contact": null,
+    "contact_num": null,
+    "serial": "SN-AG-01",
+    "otherserial": null,
+    "is_deleted": false,
+    "date_creation": "2026-10-02T07:47:20+00:00",
+    "date_mod": "2026-10-02T08:03:59+00:00",
+    "uuid": "11111111-2222-3333-4444-555555555555",
+    "is_template": false,
+    "template_name": null,
+    "is_dynamic": true,
+    "ticket_tco": 0,
+    "last_inventory_update": "2026-10-02T07:47:20+00:00",
+    "last_boot": null,
+    "status": null,
+    "entity": {
+     "id": 0,
+     "name": "Entité racine",
+     "completename": "Entité racine"
+    },
+    "manufacturer": {
+     "id": 3,
+     "name": "Dell Inc."
+    },
+    "user": null,
+    "user_tech": null,
+    "location": null,
+    "type": {
+     "id": 1,
+     "name": "Poste de travail"
+    },
+    "model": {
+     "id": 3,
+     "name": "Latitude 5440"
+    },
+    "group": [],
+    "group_tech": [],
+    "network": null,
+    "autoupdatesystem": {
+     "id": 1,
+     "name": "GLPI Native Inventory"
+    }
+   }
+  ],
+  "headers": {
+   "Content-Range": "0-5/6"
+  }
+ },
+ "GET Assets/NetworkEquipment": {
+  "status": 200,
+  "body": [
+   {
+    "id": 1,
+    "name": "SW-01",
+    "comment": null,
+    "is_recursive": false,
+    "contact": null,
+    "contact_num": null,
+    "serial": "SN-SW-01",
+    "otherserial": null,
+    "is_deleted": false,
+    "date_creation": "2026-10-01T19:22:33+00:00",
+    "date_mod": "2026-10-01T19:22:33+00:00",
+    "uuid": null,
+    "ram": null,
+    "is_template": false,
+    "template_name": null,
+    "ticket_tco": 0,
+    "is_dynamic": false,
+    "sysdescr": null,
+    "cpu": 0,
+    "last_inventory_update": null,
+    "status": {
+     "id": 1,
+     "name": "En production"
+    },
+    "entity": {
+     "id": 0,
+     "name": "Entité racine",
+     "completename": "Entité racine"
+    },
+    "manufacturer": {
+     "id": 2,
+     "name": "HP"
+    },
+    "user": null,
+    "user_tech": null,
+    "location": {
+     "id": 5,
+     "name": "Salle serveurs"
+    },
+    "type": {
+     "id": 1,
+     "name": "Switch"
+    },
+    "model": {
+     "id": 1,
+     "name": "Catalyst 9300"
+    },
+    "group": [],
+    "group_tech": [],
+    "network": null,
+    "autoupdatesystem": null,
+    "snmp_credential": null
+   },
+   {
+    "id": 2,
+    "name": "RT-01",
+    "comment": null,
+    "is_recursive": false,
+    "contact": null,
+    "contact_num": null,
+    "serial": null,
+    "otherserial": null,
+    "is_deleted": false,
+    "date_creation": "2026-10-01T19:22:33+00:00",
+    "date_mod": "2026-10-01T19:22:33+00:00",
+    "uuid": null,
+    "ram": null,
+    "is_template": false,
+    "template_name": null,
+    "ticket_tco": 0,
+    "is_dynamic": false,
+    "sysdescr": null,
+    "cpu": 0,
+    "last_inventory_update": null,
+    "status": {
+     "id": 1,
+     "name": "En production"
+    },
+    "entity": {
+     "id": 0,
+     "name": "Entité racine",
+     "completename": "Entité racine"
+    },
+    "manufacturer": null,
+    "user": null,
+    "user_tech": null,
+    "location": {
+     "id": 5,
+     "name": "Salle serveurs"
+    },
+    "type": {
+     "id": 2,
+     "name": "Routeur"
+    },
+    "model": null,
+    "group": [],
+    "group_tech": [],
+    "network": null,
+    "autoupdatesystem": null,
+    "snmp_credential": null
+   },
+   {
+    "id": 3,
+    "name": "AP-01",
+    "comment": null,
+    "is_recursive": false,
+    "contact": null,
+    "contact_num": null,
+    "serial": null,
+    "otherserial": null,
+    "is_deleted": false,
+    "date_creation": "2026-10-01T19:22:33+00:00",
+    "date_mod": "2026-10-01T19:22:33+00:00",
+    "uuid": null,
+    "ram": null,
+    "is_template": false,
+    "template_name": null,
+    "ticket_tco": 0,
+    "is_dynamic": false,
+    "sysdescr": null,
+    "cpu": 0,
+    "last_inventory_update": null,
+    "status": null,
+    "entity": {
+     "id": 0,
+     "name": "Entité racine",
+     "completename": "Entité racine"
+    },
+    "manufacturer": null,
+    "user": null,
+    "user_tech": null,
+    "location": {
+     "id": 2,
+     "name": "Bâtiment A"
+    },
+    "type": {
+     "id": 3,
+     "name": "Borne Wifi"
+    },
+    "model": null,
+    "group": [],
+    "group_tech": [],
+    "network": null,
+    "autoupdatesystem": null,
+    "snmp_credential": null
+   }
+  ],
+  "headers": {
+   "Content-Range": "0-2/3"
+  }
+ },
+ "GET Assets/Rack": {
+  "status": 200,
+  "body": [
+   {
+    "id": 1,
+    "name": "RACK-01",
+    "comment": null,
+    "is_recursive": false,
+    "serial": null,
+    "otherserial": null,
+    "width": null,
+    "height": null,
+    "depth": null,
+    "number_units": 42,
+    "is_deleted": false,
+    "room_orientation": 0,
+    "position": null,
+    "bgcolor": "#FEC95C",
+    "max_power": 0,
+    "measured_power": 0,
+    "max_weight": 0,
+    "date_creation": "2026-10-01T19:22:33+00:00",
+    "date_mod": "2026-10-01T19:22:33+00:00",
+    "entity": {
+     "id": 0,
+     "name": "Entité racine"
+    },
+    "location": {
+     "id": 5,
+     "name": "Salle serveurs"
+    },
+    "model": null,
+    "manufacturer": null,
+    "type": null,
+    "state": {
+     "id": 1,
+     "name": "En production"
+    },
+    "user": null,
+    "group": [],
+    "user_tech": null,
+    "group_tech": [],
+    "room": null,
+    "items": [
+     {
+      "id": 1,
+      "itemtype": "NetworkEquipment",
+      "items_id": 1
+     },
+     {
+      "id": 2,
+      "itemtype": "Computer",
+      "items_id": 4
+     }
+    ]
+   }
+  ],
+  "headers": {
+   "Content-Range": "0-0/1"
+  }
+ },
+ "GET Assets/Software": {
+  "status": 200,
+  "body": [
+   {
+    "id": 1,
+    "name": "TEST-SOFT-01",
+    "comment": null,
+    "is_recursive": false,
+    "is_helpdesk_visible": true,
+    "is_deleted": false,
+    "is_update": false,
+    "is_valid": true,
+    "date_creation": "2026-07-21T09:09:18+00:00",
+    "date_mod": "2026-07-21T09:09:18+00:00",
+    "is_template": false,
+    "template_name": null,
+    "ticket_tco": 0,
+    "entity": {
+     "id": 0,
+     "name": "Entité racine"
+    },
+    "location": null,
+    "category": null,
+    "manufacturer": null,
+    "parent": null,
+    "user": null,
+    "group": [],
+    "user_tech": null,
+    "group_tech": []
+   },
+   {
+    "id": 2,
+    "name": "Firefox",
+    "comment": "Navigateur web",
+    "is_recursive": true,
+    "is_helpdesk_visible": true,
+    "is_deleted": false,
+    "is_update": false,
+    "is_valid": true,
+    "date_creation": "2026-10-01T19:22:32+00:00",
+    "date_mod": "2026-10-01T19:22:32+00:00",
+    "is_template": false,
+    "template_name": null,
+    "ticket_tco": 0,
+    "entity": {
+     "id": 0,
+     "name": "Entité racine"
+    },
+    "location": null,
+    "category": {
+     "id": 2,
+     "name": "Navigateurs"
+    },
+    "manufacturer": {
+     "id": 2,
+     "name": "HP"
+    },
+    "parent": null,
+    "user": null,
+    "group": [],
+    "user_tech": null,
+    "group_tech": []
+   },
+   {
+    "id": 3,
+    "name": "PostgreSQL",
+    "comment": null,
+    "is_recursive": true,
+    "is_helpdesk_visible": true,
+    "is_deleted": false,
+    "is_update": false,
+    "is_valid": true,
+    "date_creation": "2026-10-01T19:22:32+00:00",
+    "date_mod": "2026-10-01T19:22:32+00:00",
+    "is_template": false,
+    "template_name": null,
+    "ticket_tco": 0,
+    "entity": {
+     "id": 0,
+     "name": "Entité racine"
+    },
+    "location": null,
+    "category": null,
+    "manufacturer": null,
+    "parent": null,
+    "user": null,
+    "group": [],
+    "user_tech": null,
+    "group_tech": []
+   }
+  ],
+  "headers": {
+   "Content-Range": "0-2/3"
+  }
+ },
+ "GET Assets/Appliance": {
+  "status": 200,
+  "body": [
+   {
+    "id": 1,
+    "name": "TEST-APPLIANCE-01",
+    "comment": null,
+    "is_recursive": false,
+    "contact": null,
+    "contact_num": null,
+    "serial": null,
+    "otherserial": null,
+    "is_deleted": false,
+    "date_creation": "2026-07-21T09:07:21+00:00",
+    "date_mod": "2026-07-21T09:07:21+00:00",
+    "external_id": null,
+    "is_helpdesk_visible": true,
+    "status": null,
+    "entity": {
+     "id": 0,
+     "name": "Entité racine",
+     "completename": "Entité racine"
+    },
+    "manufacturer": null,
+    "user": null,
+    "user_tech": null,
+    "location": null,
+    "type": null,
+    "group": [],
+    "group_tech": [],
+    "environment": null
+   },
+   {
+    "id": 2,
+    "name": "ERP",
+    "comment": null,
+    "is_recursive": false,
+    "contact": null,
+    "contact_num": null,
+    "serial": null,
+    "otherserial": null,
+    "is_deleted": false,
+    "date_creation": "2026-10-01T19:22:33+00:00",
+    "date_mod": "2026-10-01T19:22:33+00:00",
+    "external_id": null,
+    "is_helpdesk_visible": true,
+    "status": {
+     "id": 1,
+     "name": "En production"
+    },
+    "entity": {
+     "id": 0,
+     "name": "Entité racine",
+     "completename": "Entité racine"
+    },
+    "manufacturer": null,
+    "user": null,
+    "user_tech": null,
+    "location": null,
+    "type": {
+     "id": 1,
+     "name": "Métier"
+    },
+    "group": [],
+    "group_tech": [],
+    "environment": null
+   }
+  ],
+  "headers": {
+   "Content-Range": "0-1/2"
+  }
+ },
+ "GET Management/Database": {
+  "status": 200,
+  "body": [
+   {
+    "id": 1,
+    "name": "erp_db",
+    "date_creation": "2026-10-01T19:22:34+00:00",
+    "date_mod": "2026-10-01T19:22:34+00:00",
+    "is_deleted": false,
+    "entity": {
+     "id": 0,
+     "name": "Entité racine"
+    },
+    "instance": {
+     "id": 1,
+     "name": "PG-PROD"
+    }
+   },
+   {
+    "id": 2,
+    "name": "old_db",
+    "date_creation": "2026-10-01T19:22:34+00:00",
+    "date_mod": "2026-10-01T19:22:34+00:00",
+    "is_deleted": false,
+    "entity": {
+     "id": 0,
+     "name": "Entité racine"
+    },
+    "instance": {
+     "id": 1,
+     "name": "PG-PROD"
+    }
+   }
+  ],
+  "headers": {
+   "Content-Range": "0-1/2"
+  }
+ },
+ "GET Management/Domain": {
+  "status": 200,
+  "body": [
+   {
+    "id": 1,
+    "name": "example.com",
+    "comment": null,
+    "date_creation": "2026-10-01T19:22:34+00:00",
+    "date_mod": "2026-10-01T19:22:34+00:00",
+    "is_deleted": false,
+    "date_domain_creation": null,
+    "date_expiration": "2027-12-31 00:00:00",
+    "template_name": null,
+    "is_template": false,
+    "is_active": false,
+    "is_recursive": false,
+    "entity": {
+     "id": 0,
+     "name": "Entité racine"
+    },
+    "type": {
+     "id": 1,
+     "name": "Interne"
+    },
+    "user_tech": null,
+    "group_tech": [],
+    "user": null,
+    "group": []
+   },
+   {
+    "id": 2,
+    "name": "filiale.example",
+    "comment": null,
+    "date_creation": "2026-10-01T19:22:34+00:00",
+    "date_mod": "2026-10-01T19:22:34+00:00",
+    "is_deleted": false,
+    "date_domain_creation": null,
+    "date_expiration": null,
+    "template_name": null,
+    "is_template": false,
+    "is_active": false,
+    "is_recursive": false,
+    "entity": {
+     "id": 1,
+     "name": "Filiale A"
+    },
+    "type": {
+     "id": 1,
+     "name": "Interne"
+    },
+    "user_tech": null,
+    "group_tech": [],
+    "user": null,
+    "group": []
+   }
+  ],
+  "headers": {
+   "Content-Range": "0-1/2"
+  }
+ },
+ "GET Dropdowns/Location": {
+  "status": 200,
+  "body": [
+   {
+    "id": 1,
+    "name": "Siège",
+    "entity": {
+     "id": 0,
+     "name": "Entité racine"
+    },
+    "parent": null
+   },
+   {
+    "id": 2,
+    "name": "Bâtiment A",
+    "entity": {
+     "id": 0,
+     "name": "Entité racine"
+    },
+    "parent": {
+     "id": 1,
+     "name": "Siège"
+    }
+   },
+   {
+    "id": 3,
+    "name": "Salle 101",
+    "completename": "Siège > Bâtiment A > Salle 101",
+    "code": null,
+    "alias": null,
+    "comment": null,
+    "is_recursive": true,
+    "level": 3,
+    "room": null,
+    "building": null,
+    "address": null,
+    "town": null,
+    "postcode": null,
+    "state": null,
+    "country": null,
+    "latitude": null,
+    "longitude": null,
+    "altitude": null,
+    "date_creation": "2026-10-01T19:22:17+00:00",
+    "date_mod": "2026-10-01T19:22:17+00:00",
+    "entity": {
+     "id": 0,
+     "name": "Entité racine"
+    },
+    "parent": {
+     "id": 2,
+     "name": "Bâtiment A"
+    }
+   },
+   {
+    "id": 4,
+    "name": "Datacenter",
+    "entity": {
+     "id": 0,
+     "name": "Entité racine"
+    },
+    "parent": null
+   },
+   {
+    "id": 5,
+    "name": "Salle serveurs",
+    "completename": "Datacenter > Salle serveurs",
+    "code": null,
+    "alias": null,
+    "comment": null,
+    "is_recursive": true,
+    "level": 2,
+    "room": null,
+    "building": null,
+    "address": null,
+    "town": null,
+    "postcode": null,
+    "state": null,
+    "country": null,
+    "latitude": null,
+    "longitude": null,
+    "altitude": null,
+    "date_creation": "2026-10-01T19:22:17+00:00",
+    "date_mod": "2026-10-01T19:22:17+00:00",
+    "entity": {
+     "id": 0,
+     "name": "Entité racine"
+    },
+    "parent": {
+     "id": 4,
+     "name": "Datacenter"
+    }
+   }
+  ],
+  "headers": {
+   "Content-Range": "0-4/5"
+  }
+ },
+ "GET Dropdowns/State": {
+  "status": 200,
+  "body": [
+   {
+    "id": 1,
+    "name": "En production",
+    "completename": "En production",
+    "comment": null,
+    "is_recursive": false,
+    "level": 1,
+    "is_visible_helpdesk": true,
+    "date_creation": "2026-10-01T19:22:17+00:00",
+    "date_mod": "2026-10-01T19:22:17+00:00",
+    "entity": {
+     "id": 0,
+     "name": "Entité racine"
+    },
+    "parent": null,
+    "visibilities": {
+     "computer": true,
+     "monitor": true,
+     "networkequipment": true,
+     "peripheral": true,
+     "phone": true,
+     "printer": true,
+     "softwarelicense": true,
+     "certificate": true,
+     "enclosure": true,
+     "pdu": true,
+     "line": true,
+     "rack": true,
+     "softwareversion": true,
+     "cluster": true,
+     "contract": true,
+     "appliance": true,
+     "databaseinstance": true,
+     "cable": true,
+     "unmanaged": true,
+     "passivedcequipment": true
+    }
+   },
+   {
+    "id": 2,
+    "name": "En stock",
+    "completename": "En stock",
+    "comment": null,
+    "is_recursive": false,
+    "level": 1,
+    "is_visible_helpdesk": true,
+    "date_creation": "2026-10-01T19:22:17+00:00",
+    "date_mod": "2026-10-01T19:22:17+00:00",
+    "entity": {
+     "id": 0,
+     "name": "Entité racine"
+    },
+    "parent": null,
+    "visibilities": {
+     "computer": true,
+     "monitor": true,
+     "networkequipment": true,
+     "peripheral": true,
+     "phone": true,
+     "printer": true,
+     "softwarelicense": true,
+     "certificate": true,
+     "enclosure": true,
+     "pdu": true,
+     "line": true,
+     "rack": true,
+     "softwareversion": true,
+     "cluster": true,
+     "contract": true,
+     "appliance": true,
+     "databaseinstance": true,
+     "cable": true,
+     "unmanaged": true,
+     "passivedcequipment": true
+    }
+   }
+  ],
+  "headers": {
+   "Content-Range": "0-1/2"
+  }
+ },
+ "GET Administration/Entity": {
+  "status": 200,
+  "body": [
+   {
+    "id": 0,
+    "name": "Entité racine",
+    "parent": null,
+    "authldap": null
+   },
+   {
+    "id": 1,
+    "name": "Filiale A",
+    "comment": null,
+    "completename": "Entité racine > Filiale A",
+    "level": 2,
+    "registration_number": null,
+    "address": null,
+    "postcode": null,
+    "city": null,
+    "state": null,
+    "country": null,
+    "latitude": null,
+    "longitude": null,
+    "altitude": null,
+    "website": null,
+    "phone": null,
+    "fax": null,
+    "email": null,
+    "admin_email": null,
+    "admin_email_name": null,
+    "from_email": null,
+    "from_email_name": null,
+    "noreply_email": null,
+    "noreply_email_name": null,
+    "replyto_email": null,
+    "replyto_email_name": null,
+    "notification_subject_tag": null,
+    "ldap_dn": null,
+    "tag": null,
+    "mail_domain": null,
+    "entity_ldapfilter": null,
+    "mailing_signature": null,
+    "url_base": null,
+    "date_creation": "2026-10-01T19:22:17+00:00",
+    "date_mod": "2026-10-01T19:22:17+00:00",
+    "parent": {
+     "id": 0,
+     "name": "Entité racine"
+    },
+    "authldap": null
+   }
+  ],
+  "headers": {
+   "Content-Range": "0-1/2"
+  }
+ },
+ "GET Administration/Entity/0": {
+  "status": 200,
+  "body": {
+   "id": 0,
+   "name": "Entité racine",
+   "comment": null,
+   "completename": "Entité racine",
+   "level": 1,
+   "registration_number": null,
+   "address": null,
+   "postcode": null,
+   "city": null,
+   "state": null,
+   "country": null,
+   "latitude": null,
+   "longitude": null,
+   "altitude": null,
+   "website": null,
+   "phone": null,
+   "fax": null,
+   "email": null,
+   "admin_email": null,
+   "admin_email_name": null,
+   "from_email": null,
+   "from_email_name": null,
+   "noreply_email": null,
+   "noreply_email_name": null,
+   "replyto_email": null,
+   "replyto_email_name": null,
+   "notification_subject_tag": null,
+   "ldap_dn": null,
+   "tag": null,
+   "mail_domain": null,
+   "entity_ldapfilter": null,
+   "mailing_signature": null,
+   "url_base": null,
+   "date_creation": null,
+   "date_mod": null,
+   "parent": null,
+   "authldap": null
+  },
+  "headers": {}
+ },
+ "GET Administration/Entity/1": {
+  "status": 200,
+  "body": {
+   "id": 1,
+   "name": "Filiale A",
+   "comment": null,
+   "completename": "Entité racine > Filiale A",
+   "level": 2,
+   "registration_number": null,
+   "address": null,
+   "postcode": null,
+   "city": null,
+   "state": null,
+   "country": null,
+   "latitude": null,
+   "longitude": null,
+   "altitude": null,
+   "website": null,
+   "phone": null,
+   "fax": null,
+   "email": null,
+   "admin_email": null,
+   "admin_email_name": null,
+   "from_email": null,
+   "from_email_name": null,
+   "noreply_email": null,
+   "noreply_email_name": null,
+   "replyto_email": null,
+   "replyto_email_name": null,
+   "notification_subject_tag": null,
+   "ldap_dn": null,
+   "tag": null,
+   "mail_domain": null,
+   "entity_ldapfilter": null,
+   "mailing_signature": null,
+   "url_base": null,
+   "date_creation": "2026-10-01T19:22:17+00:00",
+   "date_mod": "2026-10-01T19:22:17+00:00",
+   "parent": {
+    "id": 0,
+    "name": "Entité racine"
+   },
+   "authldap": null
+  },
+  "headers": {}
+ },
+ "GET Management/DatabaseInstance/1": {
+  "status": 200,
+  "body": {
+   "id": 1,
+   "is_recursive": false,
+   "name": "PG-PROD",
+   "comment": null,
+   "version": "",
+   "port": "",
+   "path": "",
+   "itemtype": "Computer",
+   "items_id": 5,
+   "is_onbackup": false,
+   "is_active": true,
+   "is_deleted": false,
+   "is_dynamic": false,
+   "date_creation": "2026-10-01T19:22:34+00:00",
+   "date_mod": "2026-10-01T19:22:34+00:00",
+   "date_lastboot": null,
+   "date_lastbackup": null,
+   "entity": {
+    "id": 0,
+    "name": "Entité racine"
+   },
+   "type": {
+    "id": 1,
+    "name": "PostgreSQL"
+   },
+   "category": null,
+   "location": null,
+   "manufacturer": null,
+   "user": null,
+   "user_tech": null,
+   "state": null,
+   "database": [
+    {
+     "id": 1,
+     "name": "erp_db"
+    },
+    {
+     "id": 2,
+     "name": "old_db"
+    }
+   ]
+  },
+  "headers": {}
+ },
+ "GET Inventory/Agent": {
+  "status": 200,
+  "body": [
+   {
+    "id": 1,
+    "deviceid": "PC-AGENT-01-2026-10-02-10-00-00",
+    "name": "PC-AGENT-01-2026-10-02-10-00-00",
+    "is_recursive": false,
+    "last_contact": "2026-10-02T07:47:20+00:00",
+    "version": null,
+    "locked": false,
+    "itemtype": "Computer",
+    "items_id": 6,
+    "useragent": "GLPI-Agent_v1.11",
+    "tag": null,
+    "port": null,
+    "remote_address": "172.21.0.1",
+    "threads_network_discovery": 1,
+    "threads_network_inventory": 1,
+    "timeout_network_discovery": 0,
+    "timeout_network_inventory": 0,
+    "use_module_wake_on_lan": false,
+    "use_module_computer_inventory": false,
+    "use_module_esx_remote_inventory": false,
+    "use_module_remote_inventory": false,
+    "use_module_network_inventory": false,
+    "use_module_network_discovery": false,
+    "use_module_package_deployment": false,
+    "use_module_collect_data": false,
+    "type": {
+     "id": 1,
+     "name": "Core"
+    },
+    "entity": {
+     "id": 0,
+     "name": "Entité racine"
+    }
+   }
+  ],
+  "headers": {
+   "Content-Range": "0-0/1"
+  }
+ },
+ "GET Inventory/Agent/1/InventoryFile": {
+  "status": 200,
+  "body": {
+   "action": "inventory",
+   "deviceid": "PC-AGENT-01-2026-10-02-10-00-00",
+   "itemtype": "Computer",
+   "content": {
+    "versionclient": "GLPI-Agent_v1.11",
+    "hardware": {
+     "name": "PC-AGENT-01",
+     "uuid": "11111111-2222-3333-4444-555555555555",
+     "memory": 16384
+    },
+    "bios": {
+     "ssn": "SN-AG-01",
+     "smanufacturer": "Dell Inc.",
+     "smodel": "Latitude 5440"
+    },
+    "operatingsystem": {
+     "name": "Debian GNU/Linux",
+     "version": "12",
+     "full_name": "Debian GNU/Linux 12 (bookworm)"
+    },
+    "networks": [
+     {
+      "description": "lo",
+      "ipaddress": "127.0.0.1",
+      "ipmask": "255.0.0.0",
+      "status": "up",
+      "virtualdev": true,
+      "type": "loopback"
+     },
+     {
+      "description": "eth0",
+      "ipaddress": "192.168.10.21",
+      "ipmask": "255.255.255.0",
+      "ipsubnet": "192.168.10.0",
+      "macaddr": "aa:bb:cc:11:22:33",
+      "status": "up",
+      "type": "ethernet",
+      "virtualdev": false
+     },
+     {
+      "description": "eth0",
+      "ipaddress6": "fe80::a8bb:ccff:fe11:2233",
+      "macaddr": "aa:bb:cc:11:22:33",
+      "status": "up",
+      "type": "ethernet",
+      "virtualdev": false
+     }
+    ]
+   }
+  },
+  "headers": {}
+ },
+ "GET Assets/Computer/2": {
+  "status": 200,
+  "body": {
+   "id": 2,
+   "name": "PC-001",
+   "comment": "Poste accueil",
+   "is_recursive": false,
+   "contact": null,
+   "contact_num": null,
+   "serial": "SN-PC-001",
+   "otherserial": null,
+   "is_deleted": false,
+   "date_creation": "2026-10-01T19:22:17+00:00",
+   "date_mod": "2026-10-01T19:22:17+00:00",
+   "uuid": null,
+   "is_template": false,
+   "template_name": null,
+   "is_dynamic": false,
+   "ticket_tco": 0,
+   "last_inventory_update": null,
+   "last_boot": null,
+   "status": {
+    "id": 1,
+    "name": "En production"
+   },
+   "entity": {
+    "id": 0,
+    "name": "Entité racine",
+    "completename": "Entité racine"
+   },
+   "manufacturer": {
+    "id": 1,
+    "name": "Dell"
+   },
+   "user": {
+    "id": 2,
+    "name": "glpi"
+   },
+   "user_tech": null,
+   "location": {
+    "id": 3,
+    "name": "Salle 101"
+   },
+   "type": {
+    "id": 1,
+    "name": "Poste de travail"
+   },
+   "model": {
+    "id": 1,
+    "name": "OptiPlex 7090"
+   },
+   "group": [],
+   "group_tech": [],
+   "network": null,
+   "autoupdatesystem": null
+  },
+  "headers": {}
+ },
+ "GET Assets/Computer/2/Component/Processor": {
+  "status": 200,
+  "body": [
+   {
+    "id": 1,
+    "itemtype": "Computer",
+    "items_id": 2,
+    "is_recursive": false,
+    "serial": null,
+    "otherserial": null,
+    "is_deleted": false,
+    "is_dynamic": false,
+    "busID": null,
+    "frequency": "2500",
+    "nbcores": 8,
+    "nbthreads": 16,
+    "entity": {
+     "id": 0,
+     "name": "Entité racine"
+    },
+    "location": {
+     "id": 3,
+     "name": "Salle 101"
+    },
+    "status": null,
+    "processor": {
+     "id": 1,
+     "designation": "Intel Core i7-11700"
+    }
+   }
+  ],
+  "headers": {
+   "Content-Range": "0-0/1"
+  }
+ },
+ "GET Assets/Computer/2/Volume": {
+  "status": 200,
+  "body": [
+   {
+    "id": 1,
+    "itemtype": "Computer",
+    "items_id": 2,
+    "name": "C:",
+    "device": null,
+    "mount_point": "C:",
+    "total_size": 512000,
+    "free_size": 100000,
+    "is_deleted": false,
+    "is_dynamic": false,
+    "encryption_status": 0,
+    "encryption_tool": null,
+    "encryption_algorithm": null,
+    "encryption_type": null,
+    "date_creation": "2026-10-01T19:22:32+00:00",
+    "date_mod": "2026-10-01T19:22:32+00:00",
+    "entity": {
+     "id": 0,
+     "name": "Entité racine"
+    },
+    "filesystem": null
+   }
+  ],
+  "headers": {
+   "Content-Range": "0-0/1"
+  }
+ },
+ "GET Assets/Computer/2/Infocom": {
+  "status": 200,
+  "body": {
+   "id": 1,
+   "itemtype": "Computer",
+   "items_id": 2,
+   "comment": null,
+   "is_recursive": false,
+   "date_buy": "2024-01-15",
+   "date_use": null,
+   "date_order": "2024-01-02",
+   "date_delivery": null,
+   "date_inventory": null,
+   "date_warranty": "2024-01-15",
+   "date_decommission": null,
+   "warranty_info": null,
+   "warranty_value": 0,
+   "warranty_duration": 36,
+   "order_number": null,
+   "delivery_number": null,
+   "immo_number": null,
+   "invoice_number": null,
+   "value": 1200,
+   "amortization_type": "0",
+   "amortization_time": 0,
+   "amortization_coeff": 0,
+   "entity": {
+    "id": 0,
+    "name": "Entité racine"
+   },
+   "budget": null,
+   "supplier": null,
+   "business_criticity": null
+  },
+  "headers": {
+   "Content-Range": "0-0/1"
+  }
+ },
+ "GET Assets/Computer/2/OSInstallation": {
+  "status": 200,
+  "body": [
+   {
+    "id": 1,
+    "itemtype": "Computer",
+    "items_id": 2,
+    "license_number": null,
+    "licenseid": null,
+    "company": null,
+    "owner": null,
+    "hostid": null,
+    "date_install": null,
+    "date_creation": "2026-10-01T19:22:32+00:00",
+    "date_mod": "2026-10-01T19:22:32+00:00",
+    "is_deleted": false,
+    "is_recursive": false,
+    "operatingsystem": {
+     "id": 2,
+     "name": "Windows 11"
+    },
+    "version": {
+     "id": 2,
+     "name": "23H2"
+    },
+    "edition": null,
+    "servicepack": null,
+    "architecture": null,
+    "kernel_version": null,
+    "entity": {
+     "id": 0,
+     "name": "Entité racine"
+    }
+   }
+  ],
+  "headers": {
+   "Content-Range": "0-0/1"
+  }
+ },
+ "GET Assets/Computer/3": {
+  "status": 200,
+  "body": {
+   "id": 3,
+   "name": "PC-002",
+   "comment": null,
+   "is_recursive": false,
+   "contact": null,
+   "contact_num": null,
+   "serial": "SN-PC-002",
+   "otherserial": null,
+   "is_deleted": false,
+   "date_creation": "2026-10-01T19:22:32+00:00",
+   "date_mod": "2026-10-01T19:22:32+00:00",
+   "uuid": null,
+   "is_template": false,
+   "template_name": null,
+   "is_dynamic": false,
+   "ticket_tco": 0,
+   "last_inventory_update": null,
+   "last_boot": null,
+   "status": {
+    "id": 2,
+    "name": "En stock"
+   },
+   "entity": {
+    "id": 1,
+    "name": "Filiale A",
+    "completename": "Entité racine > Filiale A"
+   },
+   "manufacturer": {
+    "id": 2,
+    "name": "HP"
+   },
+   "user": null,
+   "user_tech": null,
+   "location": {
+    "id": 2,
+    "name": "Bâtiment A"
+   },
+   "type": {
+    "id": 1,
+    "name": "Poste de travail"
+   },
+   "model": null,
+   "group": [],
+   "group_tech": [],
+   "network": null,
+   "autoupdatesystem": null
+  },
+  "headers": {}
+ },
+ "GET Assets/Computer/3/Component/Processor": {
+  "status": 200,
+  "body": [],
+  "headers": {
+   "Content-Range": "0--1/0"
+  }
+ },
+ "GET Assets/Computer/3/Volume": {
+  "status": 200,
+  "body": [],
+  "headers": {
+   "Content-Range": "0--1/0"
+  }
+ },
+ "GET Assets/Computer/3/Infocom": {
+  "status": 404,
+  "body": {
+   "status": "ERROR_ITEM_NOT_FOUND",
+   "title": "Not found",
+   "detail": null
+  },
+  "headers": {}
+ },
+ "GET Assets/Computer/3/OSInstallation": {
+  "status": 200,
+  "body": [],
+  "headers": {
+   "Content-Range": "0--1/0"
+  }
+ },
+ "GET Assets/Computer/4": {
+  "status": 200,
+  "body": {
+   "id": 4,
+   "name": "SRV-PHY-01",
+   "comment": null,
+   "is_recursive": false,
+   "contact": null,
+   "contact_num": null,
+   "serial": "SN-SRV-01",
+   "otherserial": null,
+   "is_deleted": false,
+   "date_creation": "2026-10-01T19:22:32+00:00",
+   "date_mod": "2026-10-01T19:22:32+00:00",
+   "uuid": null,
+   "is_template": false,
+   "template_name": null,
+   "is_dynamic": false,
+   "ticket_tco": 0,
+   "last_inventory_update": null,
+   "last_boot": null,
+   "status": {
+    "id": 1,
+    "name": "En production"
+   },
+   "entity": {
+    "id": 0,
+    "name": "Entité racine",
+    "completename": "Entité racine"
+   },
+   "manufacturer": {
+    "id": 1,
+    "name": "Dell"
+   },
+   "user": null,
+   "user_tech": null,
+   "location": {
+    "id": 5,
+    "name": "Salle serveurs"
+   },
+   "type": {
+    "id": 2,
+    "name": "Serveur physique"
+   },
+   "model": {
+    "id": 2,
+    "name": "PowerEdge R740"
+   },
+   "group": [],
+   "group_tech": [],
+   "network": null,
+   "autoupdatesystem": null
+  },
+  "headers": {}
+ },
+ "GET Assets/Computer/4/Component/Processor": {
+  "status": 200,
+  "body": [],
+  "headers": {
+   "Content-Range": "0--1/0"
+  }
+ },
+ "GET Assets/Computer/4/Volume": {
+  "status": 200,
+  "body": [
+   {
+    "id": 2,
+    "itemtype": "Computer",
+    "items_id": 4,
+    "name": "/",
+    "device": null,
+    "mount_point": "/",
+    "total_size": 100000,
+    "free_size": 50000,
+    "is_deleted": false,
+    "is_dynamic": false,
+    "encryption_status": 0,
+    "encryption_tool": null,
+    "encryption_algorithm": null,
+    "encryption_type": null,
+    "date_creation": "2026-10-01T19:22:32+00:00",
+    "date_mod": "2026-10-01T19:22:32+00:00",
+    "entity": {
+     "id": 0,
+     "name": "Entité racine"
+    },
+    "filesystem": null
+   },
+   {
+    "id": 3,
+    "itemtype": "Computer",
+    "items_id": 4,
+    "name": "/data",
+    "device": null,
+    "mount_point": "/data",
+    "total_size": 2000000,
+    "free_size": 50000,
+    "is_deleted": false,
+    "is_dynamic": false,
+    "encryption_status": 0,
+    "encryption_tool": null,
+    "encryption_algorithm": null,
+    "encryption_type": null,
+    "date_creation": "2026-10-01T19:22:32+00:00",
+    "date_mod": "2026-10-01T19:22:32+00:00",
+    "entity": {
+     "id": 0,
+     "name": "Entité racine"
+    },
+    "filesystem": null
+   }
+  ],
+  "headers": {
+   "Content-Range": "0-1/2"
+  }
+ },
+ "GET Assets/Computer/4/Infocom": {
+  "status": 404,
+  "body": {
+   "status": "ERROR_ITEM_NOT_FOUND",
+   "title": "Not found",
+   "detail": null
+  },
+  "headers": {}
+ },
+ "GET Assets/Computer/4/OSInstallation": {
+  "status": 200,
+  "body": [
+   {
+    "id": 2,
+    "itemtype": "Computer",
+    "items_id": 4,
+    "license_number": null,
+    "licenseid": null,
+    "company": null,
+    "owner": null,
+    "hostid": null,
+    "date_install": null,
+    "date_creation": "2026-10-01T19:22:32+00:00",
+    "date_mod": "2026-10-01T19:22:32+00:00",
+    "is_deleted": false,
+    "is_recursive": false,
+    "operatingsystem": {
+     "id": 1,
+     "name": "Debian"
+    },
+    "version": {
+     "id": 1,
+     "name": "12"
+    },
+    "edition": null,
+    "servicepack": null,
+    "architecture": null,
+    "kernel_version": null,
+    "entity": {
+     "id": 0,
+     "name": "Entité racine"
+    }
+   }
+  ],
+  "headers": {
+   "Content-Range": "0-0/1"
+  }
+ },
+ "GET Assets/Computer/5": {
+  "status": 200,
+  "body": {
+   "id": 5,
+   "name": "VM-APP-01",
+   "comment": null,
+   "is_recursive": false,
+   "contact": null,
+   "contact_num": null,
+   "serial": null,
+   "otherserial": null,
+   "is_deleted": false,
+   "date_creation": "2026-10-01T19:22:32+00:00",
+   "date_mod": "2026-10-01T19:22:32+00:00",
+   "uuid": "4c4c4544-0042-3510-8048-b4c04f4e3132",
+   "is_template": false,
+   "template_name": null,
+   "is_dynamic": false,
+   "ticket_tco": 0,
+   "last_inventory_update": null,
+   "last_boot": null,
+   "status": {
+    "id": 1,
+    "name": "En production"
+   },
+   "entity": {
+    "id": 0,
+    "name": "Entité racine",
+    "completename": "Entité racine"
+   },
+   "manufacturer": null,
+   "user": null,
+   "user_tech": null,
+   "location": {
+    "id": 5,
+    "name": "Salle serveurs"
+   },
+   "type": {
+    "id": 3,
+    "name": "Serveur virtuel"
+   },
+   "model": null,
+   "group": [],
+   "group_tech": [],
+   "network": null,
+   "autoupdatesystem": null
+  },
+  "headers": {}
+ },
+ "GET Assets/Computer/5/Component/Processor": {
+  "status": 200,
+  "body": [],
+  "headers": {
+   "Content-Range": "0--1/0"
+  }
+ },
+ "GET Assets/Computer/5/Volume": {
+  "status": 200,
+  "body": [],
+  "headers": {
+   "Content-Range": "0--1/0"
+  }
+ },
+ "GET Assets/Computer/5/Infocom": {
+  "status": 404,
+  "body": {
+   "status": "ERROR_ITEM_NOT_FOUND",
+   "title": "Not found",
+   "detail": null
+  },
+  "headers": {}
+ },
+ "GET Assets/Computer/5/OSInstallation": {
+  "status": 200,
+  "body": [
+   {
+    "id": 3,
+    "itemtype": "Computer",
+    "items_id": 5,
+    "license_number": null,
+    "licenseid": null,
+    "company": null,
+    "owner": null,
+    "hostid": null,
+    "date_install": null,
+    "date_creation": "2026-10-01T19:22:32+00:00",
+    "date_mod": "2026-10-01T19:22:32+00:00",
+    "is_deleted": false,
+    "is_recursive": false,
+    "operatingsystem": {
+     "id": 1,
+     "name": "Debian"
+    },
+    "version": null,
+    "edition": null,
+    "servicepack": null,
+    "architecture": null,
+    "kernel_version": null,
+    "entity": {
+     "id": 0,
+     "name": "Entité racine"
+    }
+   }
+  ],
+  "headers": {
+   "Content-Range": "0-0/1"
+  }
+ },
+ "GET Assets/Computer/6": {
+  "status": 200,
+  "body": {
+   "id": 6,
+   "name": "PC-AGENT-01",
+   "comment": null,
+   "is_recursive": false,
+   "contact": null,
+   "contact_num": null,
+   "serial": "SN-AG-01",
+   "otherserial": null,
+   "is_deleted": false,
+   "date_creation": "2026-10-02T07:47:20+00:00",
+   "date_mod": "2026-10-02T08:03:59+00:00",
+   "uuid": "11111111-2222-3333-4444-555555555555",
+   "is_template": false,
+   "template_name": null,
+   "is_dynamic": true,
+   "ticket_tco": 0,
+   "last_inventory_update": "2026-10-02T07:47:20+00:00",
+   "last_boot": null,
+   "status": null,
+   "entity": {
+    "id": 0,
+    "name": "Entité racine",
+    "completename": "Entité racine"
+   },
+   "manufacturer": {
+    "id": 3,
+    "name": "Dell Inc."
+   },
+   "user": null,
+   "user_tech": null,
+   "location": null,
+   "type": {
+    "id": 1,
+    "name": "Poste de travail"
+   },
+   "model": {
+    "id": 3,
+    "name": "Latitude 5440"
+   },
+   "group": [],
+   "group_tech": [],
+   "network": null,
+   "autoupdatesystem": {
+    "id": 1,
+    "name": "GLPI Native Inventory"
+   }
+  },
+  "headers": {}
+ },
+ "GET Assets/Computer/6/Component/Processor": {
+  "status": 200,
+  "body": [],
+  "headers": {
+   "Content-Range": "0--1/0"
+  }
+ },
+ "GET Assets/Computer/6/Volume": {
+  "status": 200,
+  "body": [],
+  "headers": {
+   "Content-Range": "0--1/0"
+  }
+ },
+ "GET Assets/Computer/6/Infocom": {
+  "status": 404,
+  "body": {
+   "status": "ERROR_ITEM_NOT_FOUND",
+   "title": "Not found",
+   "detail": null
+  },
+  "headers": {}
+ },
+ "GET Assets/Computer/6/OSInstallation": {
+  "status": 200,
+  "body": [
+   {
+    "id": 4,
+    "itemtype": "Computer",
+    "items_id": 6,
+    "license_number": null,
+    "licenseid": null,
+    "company": null,
+    "owner": null,
+    "hostid": null,
+    "date_install": null,
+    "date_creation": "2026-10-02T07:47:20+00:00",
+    "date_mod": "2026-10-02T07:47:20+00:00",
+    "is_deleted": false,
+    "is_recursive": false,
+    "operatingsystem": {
+     "id": 3,
+     "name": "Debian GNU/Linux 12 (bookworm)"
+    },
+    "version": {
+     "id": 1,
+     "name": "12"
+    },
+    "edition": null,
+    "servicepack": null,
+    "architecture": null,
+    "kernel_version": null,
+    "entity": {
+     "id": 0,
+     "name": "Entité racine"
+    }
+   }
+  ],
+  "headers": {
+   "Content-Range": "0-0/1"
+  }
+ },
+ "GraphQL NetworkPort|itemtype==Computer;items_id==2": {
+  "status": 200,
+  "body": {
+   "data": {
+    "NetworkPort": [
+     {
+      "id": 1,
+      "name": "eth0",
+      "mac": "aa:bb:cc:dd:ee:01",
+      "instantiation_type": "NetworkPortEthernet",
+      "logical_number": 1,
+      "is_deleted": false
+     }
+    ]
+   },
+   "extensions": {
+    "pagination": {
+     "NetworkPort": {
+      "start": 0,
+      "limit": 1000,
+      "total_count": 1
+     }
+    }
+   }
+  },
+  "headers": {}
+ },
+ "GraphQL SoftwareInstallation|itemtype==Computer;items_id==2": {
+  "status": 200,
+  "body": {
+   "data": {
+    "SoftwareInstallation": [
+     {
+      "id": 1,
+      "softwareversion": {
+       "id": 1,
+       "name": "128.0",
+       "software": {
+        "id": 2,
+        "name": "Firefox"
+       }
+      }
+     }
+    ]
+   },
+   "extensions": {
+    "pagination": {
+     "SoftwareInstallation": {
+      "start": 0,
+      "limit": 1000,
+      "total_count": 1
+     }
+    }
+   }
+  },
+  "headers": {}
+ },
+ "GraphQL NetworkPort|itemtype==Computer;items_id==3": {
+  "status": 200,
+  "body": {
+   "data": {
+    "NetworkPort": []
+   },
+   "extensions": {
+    "pagination": {
+     "NetworkPort": {
+      "start": 0,
+      "limit": 1000,
+      "total_count": 0
+     }
+    }
+   }
+  },
+  "headers": {}
+ },
+ "GraphQL SoftwareInstallation|itemtype==Computer;items_id==3": {
+  "status": 200,
+  "body": {
+   "data": {
+    "SoftwareInstallation": []
+   },
+   "extensions": {
+    "pagination": {
+     "SoftwareInstallation": {
+      "start": 0,
+      "limit": 1000,
+      "total_count": 0
+     }
+    }
+   }
+  },
+  "headers": {}
+ },
+ "GraphQL NetworkPort|itemtype==Computer;items_id==4": {
+  "status": 200,
+  "body": {
+   "data": {
+    "NetworkPort": [
+     {
+      "id": 2,
+      "name": "eno1",
+      "mac": "aa:bb:cc:dd:ee:02",
+      "instantiation_type": "NetworkPortEthernet",
+      "logical_number": 1,
+      "is_deleted": false
+     }
+    ]
+   },
+   "extensions": {
+    "pagination": {
+     "NetworkPort": {
+      "start": 0,
+      "limit": 1000,
+      "total_count": 1
+     }
+    }
+   }
+  },
+  "headers": {}
+ },
+ "GraphQL SoftwareInstallation|itemtype==Computer;items_id==4": {
+  "status": 200,
+  "body": {
+   "data": {
+    "SoftwareInstallation": []
+   },
+   "extensions": {
+    "pagination": {
+     "SoftwareInstallation": {
+      "start": 0,
+      "limit": 1000,
+      "total_count": 0
+     }
+    }
+   }
+  },
+  "headers": {}
+ },
+ "GraphQL NetworkPort|itemtype==Computer;items_id==5": {
+  "status": 200,
+  "body": {
+   "data": {
+    "NetworkPort": []
+   },
+   "extensions": {
+    "pagination": {
+     "NetworkPort": {
+      "start": 0,
+      "limit": 1000,
+      "total_count": 0
+     }
+    }
+   }
+  },
+  "headers": {}
+ },
+ "GraphQL SoftwareInstallation|itemtype==Computer;items_id==5": {
+  "status": 200,
+  "body": {
+   "data": {
+    "SoftwareInstallation": [
+     {
+      "id": 2,
+      "softwareversion": {
+       "id": 2,
+       "name": "16",
+       "software": {
+        "id": 3,
+        "name": "PostgreSQL"
+       }
+      }
+     }
+    ]
+   },
+   "extensions": {
+    "pagination": {
+     "SoftwareInstallation": {
+      "start": 0,
+      "limit": 1000,
+      "total_count": 1
+     }
+    }
+   }
+  },
+  "headers": {}
+ },
+ "GraphQL NetworkPort|itemtype==Computer;items_id==6": {
+  "status": 200,
+  "body": {
+   "data": {
+    "NetworkPort": [
+     {
+      "id": 5,
+      "name": "lo",
+      "mac": null,
+      "instantiation_type": "NetworkPortLocal",
+      "logical_number": 0,
+      "is_deleted": false
+     },
+     {
+      "id": 6,
+      "name": "eth0",
+      "mac": "aa:bb:cc:11:22:33",
+      "instantiation_type": "NetworkPortEthernet",
+      "logical_number": 1,
+      "is_deleted": false
+     }
+    ]
+   },
+   "extensions": {
+    "pagination": {
+     "NetworkPort": {
+      "start": 0,
+      "limit": 1000,
+      "total_count": 2
+     }
+    }
+   }
+  },
+  "headers": {}
+ },
+ "GraphQL SoftwareInstallation|itemtype==Computer;items_id==6": {
+  "status": 200,
+  "body": {
+   "data": {
+    "SoftwareInstallation": []
+   },
+   "extensions": {
+    "pagination": {
+     "SoftwareInstallation": {
+      "start": 0,
+      "limit": 1000,
+      "total_count": 0
+     }
+    }
+   }
+  },
+  "headers": {}
+ },
+ "GraphQL Appliance_Item|appliance.id==2": {
+  "status": 200,
+  "body": {
+   "data": {
+    "Appliance_Item": [
+     {
+      "id": 3,
+      "itemtype": "Computer",
+      "items_id": 5,
+      "appliance": {
+       "id": 2
+      }
+     },
+     {
+      "id": 4,
+      "itemtype": "Software",
+      "items_id": 3,
+      "appliance": {
+       "id": 2
+      }
+     }
+    ]
+   },
+   "extensions": {
+    "pagination": {
+     "Appliance_Item": {
+      "start": 0,
+      "limit": 1000,
+      "total_count": 2
+     }
+    }
+   }
+  },
+  "headers": {}
+ },
+ "GraphQL VirtualMachine": {
+  "status": 200,
+  "body": {
+   "data": {
+    "VirtualMachine": [
+     {
+      "id": 1,
+      "itemtype": "Computer",
+      "items_id": 4,
+      "name": "VM-APP-01",
+      "uuid": "4c4c4544-0042-3510-8048-b4c04f4e3132",
+      "vcpu": 4,
+      "ram": 8192,
+      "comment": null,
+      "is_deleted": false
+     }
+    ]
+   },
+   "extensions": {
+    "pagination": {
+     "VirtualMachine": {
+      "start": 0,
+      "limit": 1000,
+      "total_count": 1
+     }
+    }
+   }
+  },
+  "headers": {}
+ }
+}
