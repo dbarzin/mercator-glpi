@@ -2,7 +2,9 @@
 
 use App\Services\Glpi\Contracts\GlpiClientInterface;
 use App\Services\Glpi\GlpiSyncService;
+use App\Services\Glpi\Handlers\PhysicalServerSyncHandler;
 use App\Services\Glpi\Handlers\WorkstationSyncHandler;
+use App\Services\Glpi\Mappers\PhysicalServerMapper;
 use App\Services\Glpi\Mappers\WorkstationMapper;
 use App\Services\Mercator\Contracts\MercatorClientInterface;
 
@@ -88,13 +90,18 @@ it('impose le périmètre configuré à la création', function () {
     expect($mercator->created['PC-2']['perimeter_id'])->toBe(5);
 });
 
-it('remplace le périmètre existant à la mise à jour', function () {
-    $mercator = perimeterMercator([['id' => 1, 'name' => 'PC-1', 'ext_refs' => '{GLPI}1', 'perimeter_id' => 1]]);
+it('envoie le périmètre configuré à la mise à jour', function () {
+    $mercator = perimeterMercator([
+        ['id' => 1, 'name' => 'PC-1', 'ext_refs' => '{GLPI}1', 'perimeter_id' => 5],
+        // Mercator sans gestion des périmètres : pas de perimeter_id → considéré dans le périmètre
+        ['id' => 2, 'name' => 'PC-2', 'ext_refs' => '{GLPI}2'],
+    ]);
 
-    $stats = syncWorkstations([['id' => 1, 'name' => 'PC-1']], $mercator, 5);
+    $stats = syncWorkstations([['id' => 1, 'name' => 'PC-1'], ['id' => 2, 'name' => 'PC-2']], $mercator, 5);
 
-    expect($stats['updated'])->toBe(1)
-        ->and($mercator->updated[1]['perimeter_id'])->toBe(5);
+    expect($stats['updated'])->toBe(2)
+        ->and($mercator->updated[1]['perimeter_id'])->toBe(5)
+        ->and($mercator->updated[2]['perimeter_id'])->toBe(5);
 });
 
 it('privilégie l\'homonyme du périmètre cible pour la réconciliation par nom', function () {
@@ -175,4 +182,94 @@ it('résout le site homonyme du périmètre cible', function () {
     syncWorkstations([['id' => 2, 'name' => 'PC-2', 'locations_id' => 'Siège']], $mercator, 5);
 
     expect($mercator->created['PC-2']['site_id'])->toBe(7);
+});
+
+it('ne réconcilie pas par nom un homonyme d\'un autre périmètre : crée un nouvel item', function () {
+    // Cas de deux instances GLPI alimentant chacune leur périmètre : "PC-1" du périmètre 1
+    // (autre instance) ne doit être ni déplacé, ni écrasé, ni nettoyé.
+    $mercator = perimeterMercator([
+        ['id' => 10, 'name' => 'PC-1', 'ext_refs' => '{GLPI}7', 'perimeter_id' => 1],
+        ['id' => 11, 'name' => 'Firefox-PC', 'ext_refs' => null, 'perimeter_id' => 1],
+    ]);
+
+    $stats = syncWorkstations([['id' => 1, 'name' => 'PC-1'], ['id' => 2, 'name' => 'Firefox-PC']], $mercator, 5);
+
+    expect($stats)->toMatchArray(['created' => 2, 'updated' => 0, 'deleted' => 0, 'marked_old' => 0])
+        ->and($mercator->created['PC-1'])->toMatchArray(['perimeter_id' => 5, 'ext_refs' => '{GLPI}1'])
+        ->and($mercator->updated)->toBe([])
+        ->and($mercator->deleted)->toBe([]);
+});
+
+it('ignore un item d\'un autre périmètre portant le même tag ext_refs (autre instance GLPI)', function () {
+    // L'instance A a synchronisé son Computer n°1 dans le périmètre 1 ; l'instance B, dont
+    // le Computer n°1 est un autre poste, synchronise dans le périmètre 5.
+    $mercator = perimeterMercator([['id' => 10, 'name' => 'PC-A', 'ext_refs' => '{GLPI}1', 'perimeter_id' => 1]]);
+
+    $stats = syncWorkstations([['id' => 1, 'name' => 'PC-B']], $mercator, 5);
+
+    expect($stats)->toMatchArray(['created' => 1, 'updated' => 0, 'deleted' => 0, 'marked_old' => 0])
+        ->and($mercator->created['PC-B'])->toMatchArray(['perimeter_id' => 5, 'ext_refs' => '{GLPI}1'])
+        ->and($mercator->updated)->toBe([])
+        ->and($mercator->deleted)->toBe([]);
+});
+
+it('ne déplace plus un item déjà synchronisé dans un autre périmètre : il est recréé dans le périmètre cible', function () {
+    $mercator = perimeterMercator([['id' => 10, 'name' => 'PC-1', 'ext_refs' => '{GLPI}1', 'perimeter_id' => 1]]);
+
+    syncWorkstations([['id' => 1, 'name' => 'PC-1']], $mercator, 5);
+
+    expect($mercator->updated)->toBe([])
+        ->and($mercator->created['PC-1']['perimeter_id'])->toBe(5);
+});
+
+it('résout le bay_id uniquement parmi les bays du périmètre cible', function () {
+    $glpi = Mockery::mock(GlpiClientInterface::class);
+    $glpi->shouldReceive('getItems')->with('Computer', Mockery::any())->andReturn([['id' => 4, 'name' => 'SRV-1', 'computertypes_id' => 'Serveur']]);
+    $glpi->shouldReceive('getItems')->with('Item_Rack', Mockery::any())->andReturn([['itemtype' => 'Computer', 'items_id' => 4, 'racks_id' => 1]]);
+    $glpi->shouldReceive('getItem')->andReturn([]);
+    $glpi->shouldReceive('getSubItems')->andReturn([]);
+    config(['glpi.computer_types.physical_servers' => ['Serveur']]);
+
+    $created = [];
+    $mercator = Mockery::mock(MercatorClientInterface::class);
+    $mercator->shouldReceive('getBuildings')->andReturn([]);
+    $mercator->shouldReceive('getSites')->andReturn([]);
+    $mercator->shouldReceive('getAll')->with('physical-servers')->andReturn([]);
+    $mercator->shouldReceive('getAll')->with('bays')->andReturn([
+        ['id' => 70, 'name' => 'RACK-A', 'ext_refs' => '{GLPI}1', 'perimeter_id' => 1],
+        ['id' => 80, 'name' => 'RACK-B', 'ext_refs' => '{GLPI}1', 'perimeter_id' => 5],
+    ]);
+    $mercator->shouldReceive('create')->andReturnUsing(function ($ep, $payload) use (&$created) {
+        $created[] = $payload;
+
+        return ['id' => 1];
+    });
+
+    (new GlpiSyncService)->sync(
+        $glpi,
+        $mercator,
+        new PhysicalServerSyncHandler(new PhysicalServerMapper(new WorkstationMapper)),
+        false,
+        5,
+    );
+
+    expect($created[0]['bay_id'])->toBe(80);
+});
+
+it('réconcilie par nom tous périmètres confondus sans périmètre configuré (comportement historique)', function () {
+    $mercator = perimeterMercator([['id' => 10, 'name' => 'PC-1', 'ext_refs' => null, 'perimeter_id' => 1]]);
+
+    syncWorkstations([['id' => 1, 'name' => 'PC-1']], $mercator, null);
+
+    expect($mercator->created)->toBe([])
+        ->and($mercator->updated[10]['ext_refs'])->toBe('{GLPI}1');
+});
+
+it('réconcilie par nom un item sans perimeter_id (Mercator sans périmètres)', function () {
+    $mercator = perimeterMercator([['id' => 10, 'name' => 'PC-1', 'ext_refs' => null]]);
+
+    syncWorkstations([['id' => 1, 'name' => 'PC-1']], $mercator, 5);
+
+    expect($mercator->created)->toBe([])
+        ->and($mercator->updated)->toHaveKey(10);
 });

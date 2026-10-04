@@ -35,7 +35,7 @@ class GlpiSyncCommand extends Command
                             {--dry-run : Simule la synchronisation sans écrire}
                             {--type=* : Types à synchroniser. Défaut : tous}
                             {--entity= : ID de l\'entité GLPI (priorité sur GLPI_ENTITY_ID)}
-                            {--perimeter= : ID du périmètre Mercator imposé aux objets créés et mis à jour (priorité sur MERCATOR_PERIMETER_ID)}';
+                            {--perimeter= : ID du périmètre Mercator synchronisé : seuls ses objets sont réconciliés et nettoyés (priorité sur MERCATOR_PERIMETER_ID)}';
 
     protected $description = 'Synchronise les assets GLPI vers Mercator';
 
@@ -179,7 +179,7 @@ class GlpiSyncCommand extends Command
             if ($type === 'links') {
                 $this->line('  <fg=cyan>─── links ───</>');
                 try {
-                    $linkStats = $syncService->syncLinks($glpi, $mercator, $dryRun);
+                    $linkStats = $syncService->syncLinks($glpi, $mercator, $dryRun, $perimeterId);
                     $this->line(sprintf(
                         '  <fg=yellow>~%d mis à jour</>  <fg=gray>%d ignorés</>  <fg=red>%d erreurs</>',
                         $linkStats['updated'],
@@ -200,7 +200,7 @@ class GlpiSyncCommand extends Command
             if ($type === 'activity_links') {
                 $this->line('  <fg=cyan>─── activity_links ───</>');
                 try {
-                    $linkStats = $syncService->syncActivityLinks($glpi, $mercator, $dryRun);
+                    $linkStats = $syncService->syncActivityLinks($glpi, $mercator, $dryRun, $perimeterId);
                     $this->line(sprintf(
                         '  <fg=yellow>~%d mis à jour</>  <fg=gray>%d ignorés</>  <fg=red>%d erreurs</>',
                         $linkStats['updated'],
@@ -221,7 +221,7 @@ class GlpiSyncCommand extends Command
             if ($type === 'appliance_links') {
                 $this->line('  <fg=cyan>─── appliance_links ───</>');
                 try {
-                    $linkStats = $syncService->syncApplianceLinks($glpi, $mercator, $dryRun);
+                    $linkStats = $syncService->syncApplianceLinks($glpi, $mercator, $dryRun, $perimeterId);
                     $this->line(sprintf(
                         '  <fg=yellow>~%d mis à jour</>  <fg=gray>%d ignorés</>  <fg=red>%d erreurs</>',
                         $linkStats['updated'],
@@ -242,7 +242,7 @@ class GlpiSyncCommand extends Command
             if ($type === 'database_links') {
                 $this->line('  <fg=cyan>─── database_links ───</>');
                 try {
-                    $linkStats = $syncService->syncDatabaseLinks($glpi, $mercator, $dryRun);
+                    $linkStats = $syncService->syncDatabaseLinks($glpi, $mercator, $dryRun, $perimeterId);
                     $this->line(sprintf(
                         '  <fg=yellow>~%d mis à jour</>  <fg=gray>%d ignorés</>  <fg=red>%d erreurs</>',
                         $linkStats['updated'],
@@ -296,7 +296,7 @@ class GlpiSyncCommand extends Command
             if (in_array('logical_servers', $types, true) && in_array('physical_servers', $types, true)) {
                 $this->line('  <fg=cyan>─── vm_links ───</>');
                 try {
-                    $vmStats = $vmLinkSyncService->sync($glpi, $mercator, $dryRun);
+                    $vmStats = $vmLinkSyncService->sync($glpi, $mercator, $dryRun, $perimeterId);
                     $this->line(sprintf(
                         '  <fg=yellow>~%d mis à jour</>  <fg=gray>%d ignorés</>  <fg=yellow>%d ambigus</>  <fg=red>%d erreurs</>',
                         $vmStats['updated'],

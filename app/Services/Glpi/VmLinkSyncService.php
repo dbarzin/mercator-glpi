@@ -2,6 +2,7 @@
 
 namespace App\Services\Glpi;
 
+use App\Services\Glpi\Concerns\FiltersMercatorPerimeter;
 use App\Services\Glpi\Contracts\GlpiClientInterface;
 use App\Services\Glpi\Handlers\Concerns\MatchesGlpiDropdownType;
 use App\Services\Mercator\Contracts\MercatorClientInterface;
@@ -22,6 +23,7 @@ use Throwable;
  */
 class VmLinkSyncService
 {
+    use FiltersMercatorPerimeter;
     use MatchesGlpiDropdownType;
 
     /**
@@ -38,6 +40,7 @@ class VmLinkSyncService
         GlpiClientInterface $glpi,
         MercatorClientInterface $mercator,
         bool $dryRun = false,
+        ?int $perimeterId = null,
     ): array {
         $stats = ['updated' => 0, 'skipped' => 0, 'ambiguous' => 0, 'errors' => 0];
 
@@ -133,8 +136,10 @@ class VmLinkSyncService
 
         // ── 4. Résolution Mercator via ext_refs ({GLPI}<id>) ──────────────────
 
-        $lsMercByGlpiId = $this->indexByGlpiId($mercator->getAll('logical-servers'));
-        $psMercByGlpiId = $this->indexByGlpiId($mercator->getAll('physical-servers'));
+        // Périmètre cible (--perimeter) : seuls les serveurs de ce périmètre sont liés et,
+        // pour les serveurs logiques, nettoyés (PUT physical_servers=[]).
+        $lsMercByGlpiId = $this->indexByGlpiId($this->onlyPerimeter($mercator->getAll('logical-servers'), $perimeterId));
+        $psMercByGlpiId = $this->indexByGlpiId($this->onlyPerimeter($mercator->getAll('physical-servers'), $perimeterId));
 
         // ── 5. PUT logical-servers/{id} avec physical_servers ─────────────────
         // Union des serveurs logiques résolus côté GLPI et des serveurs logiques

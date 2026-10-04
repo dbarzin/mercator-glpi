@@ -2,6 +2,7 @@
 
 use App\Services\Glpi\Contracts\GlpiClientInterface;
 use App\Services\Glpi\GlpiSyncService;
+use App\Services\Glpi\VmLinkSyncService;
 use App\Services\Mercator\Contracts\MercatorClientInterface;
 
 // ── Option --perimeter / MERCATOR_PERIMETER_ID de glpi:sync ──────────────────
@@ -102,4 +103,46 @@ it('poursuit si l\'existence du périmètre n\'est pas vérifiable (permission c
     $this->artisan('glpi:sync', ['--type' => ['workstations'], '--perimeter' => '3', '--dry-run' => true])->assertExitCode(0);
 
     expect($received->getArrayCopy())->toBe([3]);
+});
+
+it('transmet le périmètre aux synchronisations de liens et à vm_links', function () {
+    config(['glpi.sync.vm_links' => true]);
+    mockClientsForPerimeter();
+
+    $received = new ArrayObject;
+    $linkStats = ['updated' => 0, 'skipped' => 0, 'errors' => 0];
+
+    $this->mock(GlpiSyncService::class, function ($mock) use ($received, $linkStats) {
+        $mock->shouldReceive('sync')->andReturn(['created' => 0, 'updated' => 0, 'deleted' => 0, 'marked_old' => 0, 'errors' => 0, 'endpoint_missing' => false]);
+
+        foreach (['syncLinks', 'syncActivityLinks', 'syncApplianceLinks', 'syncDatabaseLinks'] as $method) {
+            $mock->shouldReceive($method)->andReturnUsing(function ($glpi, $mercator, $dryRun, $perimeterId = null) use ($received, $method, $linkStats) {
+                $received[$method] = $perimeterId;
+
+                return $linkStats;
+            });
+        }
+    });
+
+    $this->mock(VmLinkSyncService::class, function ($mock) use ($received) {
+        $mock->shouldReceive('sync')->andReturnUsing(function ($glpi, $mercator, $dryRun, $perimeterId = null) use ($received) {
+            $received['vm_links'] = $perimeterId;
+
+            return ['updated' => 0, 'skipped' => 0, 'ambiguous' => 0, 'errors' => 0];
+        });
+    });
+
+    $this->artisan('glpi:sync', [
+        '--type' => ['logical_servers', 'physical_servers', 'links', 'activity_links', 'appliance_links', 'database_links'],
+        '--perimeter' => '7',
+        '--dry-run' => true,
+    ])->assertExitCode(0);
+
+    expect($received->getArrayCopy())->toBe([
+        'syncLinks' => 7,
+        'syncActivityLinks' => 7,
+        'syncApplianceLinks' => 7,
+        'syncDatabaseLinks' => 7,
+        'vm_links' => 7,
+    ]);
 });

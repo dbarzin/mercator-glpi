@@ -18,6 +18,7 @@
   - [API GLPI v2 : différences et limites](#api-glpi-v2--différences-et-limites)
   - [Configuration côté Mercator](#configuration-côté-mercator)
   - [Périmètre Mercator](#périmètre-mercator)
+  - [Plusieurs instances GLPI vers un même Mercator](#plusieurs-instances-glpi-vers-un-même-mercator)
 - [Utilisation](#utilisation)
   - [Synchronisation complète](#synchronisation-complète)
   - [Ordre d'exécution et dépendances](#ordre-dexécution-et-dépendances)
@@ -208,7 +209,7 @@ Copiez `.env.sample` vers `.env` et renseignez les valeurs :
 | `MERCATOR_URL` | — | URL de base de l'instance Mercator (sans slash final)                                                                                                                     | `https://mercator.acme.fr`                             |
 | `MERCATOR_LOGIN` | — | Email du compte Mercator utilisé pour l'API                                                                                                                               | `sync@acme.fr`                                         |
 | `MERCATOR_PASSWORD` | — | Mot de passe du compte Mercator                                                                                                                                           | `motdepasse`                                           |
-| `MERCATOR_PERIMETER_ID` | _(vide)_ | ID du périmètre Mercator imposé aux objets créés **et** mis à jour (remplace le périmètre existant) ; vide = périmètre non géré par le connecteur. Surchargé par `--perimeter` (voir [Périmètre Mercator](#périmètre-mercator)) | `2`                                                    |
+| `MERCATOR_PERIMETER_ID` | _(vide)_ | ID du périmètre Mercator de la synchronisation : seuls les objets de ce périmètre sont réconciliés, mis à jour et nettoyés, les objets créés y sont rangés ; vide = périmètre non géré par le connecteur. Surchargé par `--perimeter` (voir [Périmètre Mercator](#périmètre-mercator)) | `2`                                                    |
 | `SYNC_DRY_RUN` | `false` | Si `true`, simule sans écrire dans Mercator                                                                                                                               | `true`                                                 |
 | `GLPI_SYNC_VM_LINKS` | `false` | Si `true`, importe les liens serveur logique (VM) ↔ serveur(s) physique(s) hôte(s) (voir [Liens VM ↔ serveur physique](#liens-serveur-logique-vm--serveur-physique-glpi_sync_vm_links)) | `true`                                                 |
 | `GLPI_SYNC_ONLY_ACTIVE_DATABASES` | `false` | Si `true`, ne synchronise que les bases de données dont `is_active = 1` dans GLPI ; `false` = toutes les bases | `true`                                                 |
@@ -312,25 +313,72 @@ Le compte Mercator utilisé doit disposer des droits d'écriture (création + mo
 
 Mercator peut cloisonner sa cartographie en **périmètres** : chaque objet porte un `perimeter_id`, et les rôles des utilisateurs donnent accès à un ou plusieurs périmètres. Le connecteur peut ranger les objets issus de GLPI dans un périmètre donné, via l'option `--perimeter=<id>` ou la variable `MERCATOR_PERIMETER_ID` (l'option est prioritaire).
 
-| Configuration | Création | Mise à jour | Nettoyage des orphelins (suppression / `[OLD]`) |
+| Configuration | Objets Mercator pris en compte (réconciliation, nettoyage, bâtiments/sites/baies, liens) | Création | Mise à jour |
 |---|---|---|---|
-| Aucun périmètre (défaut) | pas de `perimeter_id` envoyé : Mercator applique son défaut (périmètre actif du compte API, à défaut le premier de ses rôles, à défaut le périmètre 1 « Défaut ») | périmètre **inchangé** | tous les objets visibles par le compte API |
-| `--perimeter=N` | `perimeter_id = N` | `perimeter_id = N` : **remplace** le périmètre existant (l'objet est déplacé dans N) | uniquement les objets du périmètre N |
+| Aucun périmètre (défaut) | tous les objets visibles par le compte API | pas de `perimeter_id` envoyé : Mercator applique son défaut (périmètre actif du compte API, à défaut le premier de ses rôles, à défaut le périmètre 1 « Défaut ») | périmètre **inchangé** |
+| `--perimeter=N` | **uniquement les objets du périmètre N** | `perimeter_id = N` | `perimeter_id = N` |
 
-Avec un périmètre défini :
+Avec un périmètre défini, **tout ce qui se trouve hors du périmètre N est ignoré** par l'ensemble des traitements du connecteur :
 
-- la réconciliation par `ext_refs` (`{GLPI}<id>`) porte sur tous les périmètres visibles : un objet déjà synchronisé dans un autre périmètre est retrouvé et **déplacé** dans le périmètre N ;
-- Mercator n'imposant l'unicité des noms que **par périmètre**, en cas d'homonymes (même nom, ou même tag `ext_refs`) l'objet du périmètre N est privilégié ; de même pour la résolution des bâtiments et sites (`building_id`, `site_id`) ;
-- les objets des **autres** périmètres qui ne correspondent à aucun item GLPI ne sont ni supprimés ni marqués `[OLD]` : plusieurs synchronisations (ex. une par entité GLPI) peuvent alimenter chacune leur périmètre ;
-- les mises à jour de liens (`links`, `activity_links`, `appliance_links`, `database_links`, `vm_links`) et le renommage `[OLD]` ne modifient jamais le périmètre ;
+- la réconciliation par tag `ext_refs` (`{GLPI}<id>`) et par nom ne retient que les objets du périmètre N. Un objet d'un autre périmètre portant le même tag ou le même nom n'est jamais modifié ni déplacé : un nouvel objet est créé dans N (Mercator n'impose l'unicité des noms que par périmètre) ;
+- le nettoyage des orphelins (suppression / `[OLD]`) ne touche que le périmètre N ;
+- les bâtiments, sites (`building_id`, `site_id`, par nom) et baies (`bay_id`, par tag) sont recherchés dans le périmètre N uniquement : un objet dont le lieu n'existe que dans un autre périmètre reste sans bâtiment/site ;
+- un objet sans `perimeter_id` (Mercator sans gestion des périmètres) est considéré comme appartenant au périmètre N ;
+- les synchronisations de liens (`links`, `activity_links`, `appliance_links`, `database_links`, `vm_links`) ne résolvent et ne mettent à jour que des objets du périmètre N : un lien n'est jamais écrit vers ou sur un objet d'un autre périmètre, et `vm_links` ne nettoie que les serveurs logiques du périmètre N. Ces synchronisations ne modifient jamais le périmètre des objets ;
 - au démarrage, le connecteur vérifie que le périmètre existe (`GET /api/perimeters/{id}`) et s'arrête sinon (`Le périmètre Mercator N n'existe pas`). Cette vérification requiert la permission `configure` ; sans elle, elle est ignorée (warning dans les logs).
 
-Prérequis côté Mercator : le compte `MERCATOR_LOGIN` doit avoir un **rôle sur le périmètre N** (avec les droits de création/modification sur les objets synchronisés). Sinon Mercator rejette chaque objet avec une erreur HTTP 422 sur `perimeter_id`. Sur un Mercator où la gestion des périmètres est désactivée, le `perimeter_id` est simplement enregistré sur les objets.
+> **Changement de périmètre d'objets déjà synchronisés** : un objet déjà présent dans un autre périmètre n'étant plus retrouvé, lancer pour la première fois la synchronisation avec `--perimeter=N` sur un parc déjà synchronisé ailleurs (ex. dans le périmètre 1 par défaut) **crée des doublons** dans N, et laisse les anciens objets intacts dans leur périmètre d'origine. Déplacez d'abord ces objets dans le périmètre N depuis Mercator (ou supprimez-les), puis lancez la synchronisation.
+
+Prérequis côté Mercator : le compte `MERCATOR_LOGIN` doit avoir un **rôle sur le périmètre N** (avec les droits de lecture, création, modification et suppression sur les objets synchronisés). Sinon Mercator rejette chaque objet avec une erreur HTTP 422 sur `perimeter_id`.
 
 ```bash
 # Ranger les actifs de l'entité GLPI 3 dans le périmètre Mercator 2
 php application glpi:sync --entity=3 --perimeter=2
 ```
+
+### Plusieurs instances GLPI vers un même Mercator
+
+Le connecteur identifie un objet GLPI par son tag `{GLPI}<id>` dans `ext_refs`. Ce tag **ne contient pas d'identifiant d'instance** : chaque GLPI numérotant ses objets à partir de 1, le Computer n°2 de l'instance A et le Computer n°2 de l'instance B portent le même tag `{GLPI}2`. Synchroniser deux instances dans un même Mercator **sans cloisonnement** provoque donc des conflits :
+
+| Conflit | Conséquence |
+|---|---|
+| Même tag `{GLPI}<id>` | le run de B retrouve l'objet de A et l'**écrase** (nom, description, IP…) ; au run suivant A le reprend : les objets alternent à chaque passage |
+| Nettoyage des orphelins | un objet tagué `{GLPI}<id>` absent de la synchronisation en cours est **supprimé** : le run de B supprime les objets de A dont l'id n'existe pas dans B, et inversement |
+| Liens | `links`, `activity_links`, `appliance_links`, `database_links`, `vm_links` se résolvent par ce même tag : un poste de A peut recevoir les logiciels d'un poste de B ; `vm_links` vide les liens VM des serveurs logiques tagués qu'il ne retrouve pas (ceux de l'autre instance) |
+| Même nom | deux objets homonymes (un logiciel « Firefox », un bâtiment « Siège »…) sont fusionnés en un seul objet Mercator, mis à jour alternativement par A et B |
+
+**Configuration recommandée — un périmètre et un compte Mercator dédiés par instance :**
+
+1. Activer la gestion des périmètres dans Mercator et créer un périmètre par instance GLPI (ex. 2 = « Siège », 3 = « Filiale »).
+2. Créer **un compte Mercator par instance**, dont le(s) rôle(s) ne portent **que sur le périmètre de cette instance** (lecture, création, modification et suppression des objets synchronisés). Ne pas utiliser de compte administrateur ayant accès à tous les périmètres.
+3. Configurer le connecteur de chaque instance avec son compte et son périmètre (un `.env` par répertoire d'installation, ou des variables d'environnement par tâche cron) :
+
+```dotenv
+# /opt/mercator-glpi-siege/.env — instance « Siège »
+GLPI_URL=https://glpi-siege.example
+MERCATOR_LOGIN=svc-glpi-siege@acme.fr
+MERCATOR_PERIMETER_ID=2
+```
+
+```dotenv
+# /opt/mercator-glpi-filiale/.env — instance « Filiale »
+GLPI_URL=https://glpi-filiale.example
+MERCATOR_LOGIN=svc-glpi-filiale@acme.fr
+MERCATOR_PERIMETER_ID=3
+```
+
+Les deux mécanismes se complètent :
+
+| Mécanisme | Ce qu'il protège |
+|---|---|
+| Compte Mercator dédié au périmètre (gestion des périmètres activée) | l'API Mercator ne renvoie à ce compte que les objets de son périmètre : **tous** les traitements du connecteur — objets, baies, bâtiments/sites **et liens** — ne voient que ce périmètre, et Mercator refuse toute écriture hors de ce périmètre |
+| `--perimeter` / `MERCATOR_PERIMETER_ID` | côté connecteur, tous les traitements (réconciliation par tag et par nom, nettoyage, bâtiments/sites/baies, liens) ignorent tout objet hors du périmètre, même si le compte en voit davantage ; les objets créés sont rangés dans le bon périmètre |
+
+Avec cette configuration, les conflits du tableau ci-dessus ne peuvent plus se produire : les tags identiques des deux instances ne se rencontrent jamais, le nettoyage d'une instance ne touche pas les objets de l'autre, et des objets de même nom (ex. « Firefox ») coexistent dans les deux périmètres, chacun alimenté par son instance.
+
+> Le filtrage par l'API Mercator n'est effectif que si la **gestion des périmètres est activée** dans Mercator. Désactivée, tous les comptes voient tous les objets : seule la restriction `--perimeter` du connecteur s'applique (voir ci-dessous).
+
+**Compte Mercator partagé entre instances (déconseillé)** : si chaque instance est synchronisée avec son propre `--perimeter`, le connecteur cloisonne à lui seul l'ensemble des traitements (objets, nettoyage, bâtiments/sites/baies, liens) : les conflits du tableau ci-dessus ne se produisent pas. Les comptes dédiés restent néanmoins recommandés, car ils protègent aussi contre les erreurs de configuration — une exécution **oubliant `--perimeter`** (ou avec un mauvais périmètre) sur un compte partagé voit et modifie tous les périmètres, y compris le nettoyage des objets de l'autre instance ; avec un compte dédié, c'est Mercator qui l'en empêche.
 
 ---
 
@@ -411,7 +459,7 @@ php application glpi:sync --type=database_links   # liens database ↔ serveur l
 | `--type=<type>` | tous les types | Type d'actif à synchroniser (répétable) |
 | `--dry-run` | `false` | Simule la synchronisation sans écrire dans Mercator |
 | `--entity=<id>` | valeur de `GLPI_ENTITY_ID` | Filtre sur une entité GLPI précise (récursif) |
-| `--perimeter=<id>` | valeur de `MERCATOR_PERIMETER_ID` | Périmètre Mercator imposé aux objets créés et mis à jour (voir [Périmètre Mercator](#périmètre-mercator)) |
+| `--perimeter=<id>` | valeur de `MERCATOR_PERIMETER_ID` | Périmètre Mercator synchronisé : seuls ses objets sont réconciliés et nettoyés, les objets créés y sont rangés (voir [Périmètre Mercator](#périmètre-mercator)) |
 
 ### Exemples de commandes courantes
 
@@ -1261,7 +1309,8 @@ Les tests utilisent **Mockery** et `Http::fake()` — aucun appel réseau réel.
 | `SiteSyncHandlerTest` | Filtre `filterItem()` du `SiteSyncHandler` (Location racine uniquement) |
 | `GlpiSyncCommandTest` (`tests/Feature/`) | Intégration commande CLI |
 | `PerimeterOptionCommandTest` (`tests/Feature/`) | Option `--perimeter` / `MERCATOR_PERIMETER_ID` : priorité, validation, arrêt si périmètre inexistant |
-| `GlpiSyncServicePerimeterTest` | Périmètre Mercator : `perimeter_id` à la création et à la mise à jour, homonymes, nettoyage limité au périmètre, building/site |
+| `GlpiPerimeterLinksTest` | Périmètre Mercator : liens (`links`, `activity_links`, `appliance_links`, `database_links`, `vm_links`) et bâtiments/sites restreints au périmètre |
+| `GlpiSyncServicePerimeterTest` | Périmètre Mercator : `perimeter_id` à la création et à la mise à jour, réconciliation (tag et nom), nettoyage et baies limités au périmètre, même tag dans un autre périmètre (autre instance), building/site |
 | `MercatorClientPerimeterTest` | Vérification d'existence d'un périmètre (`perimeterExists()`) |
 
 > Il n'existe pas (encore) de test dédié pour `CertificateMapper`/`CertificateSyncHandler` ni `ClusterMapper`/`ClusterSyncHandler`.
