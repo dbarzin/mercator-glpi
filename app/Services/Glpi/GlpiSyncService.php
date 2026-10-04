@@ -33,6 +33,13 @@ class GlpiSyncService
      * retourne les stats vides avec 'endpoint_missing' => true afin que la commande
      * puisse afficher un avertissement sans comptabiliser d'erreur.
      *
+     * $perimeterId (option --perimeter / MERCATOR_PERIMETER_ID) : périmètre Mercator
+     * imposé aux items créés ET mis à jour (il remplace le périmètre existant). null =
+     * aucun perimeter_id envoyé : Mercator applique son défaut à la création et le
+     * périmètre d'un item existant n'est pas modifié. Quand il est défini, la
+     * réconciliation par nom (et la résolution building/site) privilégie les items de
+     * ce périmètre, et le nettoyage des orphelins ne touche que ce périmètre.
+     *
      * @return array{created: int, updated: int, deleted: int, marked_old: int, errors: int, endpoint_missing: bool}
      */
     public function sync(
@@ -40,6 +47,7 @@ class GlpiSyncService
         MercatorClientInterface $mercator,
         SyncHandler $handler,
         bool $dryRun = false,
+        ?int $perimeterId = null,
     ): array {
         $stats = ['created' => 0, 'updated' => 0, 'deleted' => 0, 'marked_old' => 0, 'errors' => 0, 'endpoint_missing' => false];
         $endpoint = $handler->mercatorEndpoint();
@@ -52,8 +60,8 @@ class GlpiSyncService
 
         // ── 1. Chargement des données ─────────────────────────────────────────
 
-        $buildingsMap = $this->buildBuildingsMap($mercator);
-        $sitesMap = $this->buildSitesMap($mercator);
+        $buildingsMap = $this->buildBuildingsMap($mercator, $perimeterId);
+        $sitesMap = $this->buildSitesMap($mercator, $perimeterId);
 
         $glpiItems = $glpi->getItems(
             $handler->glpiItemType(),
@@ -207,25 +215,39 @@ class GlpiSyncService
 
         $mercByGlpiId = [];
         $mercByName = [];
+        // Ordre historique : pour un même tag ext_refs, le dernier item lu l'emporte ; pour
+        // un même nom, le premier. Avec un périmètre cible (--perimeter), un homonyme situé
+        // dans ce périmètre l'emporte toujours sur celui d'un autre périmètre (Mercator
+        // n'impose l'unicité des noms que par périmètre).
+        $inTarget = fn (array $entry): bool => $perimeterId !== null && $this->inPerimeter($entry, $perimeterId);
+        $preferLast = fn (?array $current, array $candidate): bool => $current === null
+            || $inTarget($candidate)
+            || ! $inTarget($current);
+        $preferFirst = fn (?array $current, array $candidate): bool => $current === null
+            || ($inTarget($candidate) && ! $inTarget($current));
+
         foreach ($mercatorItems as $item) {
             $entry = [
                 'id' => $item['id'],
                 'name' => $item['name'],
                 'ext_refs' => $item['ext_refs'] ?? null,
+                'perimeter_id' => $item['perimeter_id'] ?? null,
             ];
 
-            if ($tracksMultipleIds) {
-                foreach ($this->extractGlpiIds($entry['ext_refs'], $extRefsTag) as $glpiId) {
-                    $mercByGlpiId[(string) $glpiId] = $entry;
-                }
-            } else {
-                $glpiId = $this->extractGlpiId($entry['ext_refs'], $extRefsTag);
-                if ($glpiId !== null) {
+            $glpiIds = $tracksMultipleIds
+                ? $this->extractGlpiIds($entry['ext_refs'], $extRefsTag)
+                : array_filter([$this->extractGlpiId($entry['ext_refs'], $extRefsTag)], fn ($id) => $id !== null);
+
+            foreach ($glpiIds as $glpiId) {
+                if ($preferLast($mercByGlpiId[(string) $glpiId] ?? null, $entry)) {
                     $mercByGlpiId[(string) $glpiId] = $entry;
                 }
             }
 
-            $mercByName[strtolower($item['name'])] ??= $entry;
+            $nameKey = strtolower($item['name']);
+            if ($preferFirst($mercByName[$nameKey] ?? null, $entry)) {
+                $mercByName[$nameKey] = $entry;
+            }
         }
 
         $context = ['buildings_map' => $buildingsMap, 'sites_map' => $sitesMap];
@@ -264,6 +286,10 @@ class GlpiSyncService
                 // remplacer) — plusieurs items GLPI homonymes réconciliés sur ce même
                 // enregistrement Mercator restent tous traçables dans ext_refs.
                 $payload['ext_refs'] = $this->buildExtRefs($existing['ext_refs'] ?? null, $glpiItem['id'], $extRefsTag, $tracksMultipleIds);
+
+                if ($perimeterId !== null) {
+                    $payload['perimeter_id'] = $perimeterId;
+                }
 
                 // Pas de troncature : ce log n'est émis qu'en LOG_LEVEL=debug (opt-in) et
                 // sert justement à inspecter des champs en fin de payload (cpu, memory, disk…).
@@ -315,7 +341,12 @@ class GlpiSyncService
                 // unique → HTTP 422 "already been taken"). En mettant à jour l'index ici,
                 // le second item est réconcilié (UPDATE) sur le même enregistrement Mercator.
                 if ($mercId !== null) {
-                    $mercEntry = ['id' => $mercId, 'name' => $glpiItem['name'], 'ext_refs' => $payload['ext_refs']];
+                    $mercEntry = [
+                        'id' => $mercId,
+                        'name' => $glpiItem['name'],
+                        'ext_refs' => $payload['ext_refs'],
+                        'perimeter_id' => $perimeterId ?? $existing['perimeter_id'] ?? null,
+                    ];
                     $mercByGlpiId[$glpiId] = $mercEntry;
                     $mercByName[strtolower($glpiItem['name'])] = $mercEntry;
 
@@ -336,6 +367,12 @@ class GlpiSyncService
         if ($handler->processOrphans()) {
             foreach ($mercatorItems as $mercItem) {
                 if (isset($matchedMercIds[$mercItem['id']])) {
+                    continue;
+                }
+
+                // Périmètre cible défini : les items des autres périmètres ne relèvent pas
+                // de cette synchronisation (ni suppression, ni [OLD]).
+                if ($perimeterId !== null && ! $this->inPerimeter($mercItem, $perimeterId)) {
                     continue;
                 }
 
@@ -1258,29 +1295,60 @@ class GlpiSyncService
     // Helpers — buildings
     // -------------------------------------------------------------------------
 
-    private function buildBuildingsMap(MercatorClientInterface $mercator): array
+    /**
+     * Index nom (lowercase) → building. Sur homonymie, le dernier lu l'emporte, sauf si un
+     * périmètre cible est défini : un building de ce périmètre est alors privilégié.
+     */
+    private function buildBuildingsMap(MercatorClientInterface $mercator, ?int $perimeterId = null): array
     {
         $map = [];
+        $inTarget = [];
 
         foreach ($mercator->getBuildings() as $building) {
-            $map[strtolower($building['name'])] = [
+            $key = strtolower($building['name']);
+
+            if ($perimeterId !== null && ($inTarget[$key] ?? false) && ! $this->inPerimeter($building, $perimeterId)) {
+                continue;
+            }
+
+            $map[$key] = [
                 'id' => $building['id'],
                 'site_id' => $building['site_id'] ?? null,
             ];
+            $inTarget[$key] = $perimeterId !== null && $this->inPerimeter($building, $perimeterId);
         }
 
         return $map;
     }
 
-    private function buildSitesMap(MercatorClientInterface $mercator): array
+    private function buildSitesMap(MercatorClientInterface $mercator, ?int $perimeterId = null): array
     {
         $map = [];
+        $inTarget = [];
 
         foreach ($mercator->getSites() as $site) {
-            $map[strtolower($site['name'])] = $site['id'];
+            $key = strtolower($site['name']);
+
+            if ($perimeterId !== null && ($inTarget[$key] ?? false) && ! $this->inPerimeter($site, $perimeterId)) {
+                continue;
+            }
+
+            $map[$key] = $site['id'];
+            $inTarget[$key] = $perimeterId !== null && $this->inPerimeter($site, $perimeterId);
         }
 
         return $map;
+    }
+
+    /**
+     * Un item Mercator sans perimeter_id (Mercator sans gestion des périmètres) est
+     * considéré comme appartenant à tout périmètre.
+     */
+    private function inPerimeter(array $item, int $perimeterId): bool
+    {
+        $itemPerimeter = $item['perimeter_id'] ?? null;
+
+        return $itemPerimeter === null || (int) $itemPerimeter === $perimeterId;
     }
 
     // -------------------------------------------------------------------------

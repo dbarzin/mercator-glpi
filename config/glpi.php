@@ -27,6 +27,10 @@ return [
         'url' => env('MERCATOR_URL'),
         'login' => env('MERCATOR_LOGIN'),
         'password' => env('MERCATOR_PASSWORD'),
+        // Périmètre Mercator imposé aux objets créés et mis à jour (remplace le périmètre
+        // existant). Vide = aucun perimeter_id envoyé (défaut Mercator à la création,
+        // périmètre inchangé à la mise à jour). Surchargé par l'option --perimeter.
+        'perimeter_id' => filled(env('MERCATOR_PERIMETER_ID')) ? (int) env('MERCATOR_PERIMETER_ID') : null,
     ],
 
     'sync' => [

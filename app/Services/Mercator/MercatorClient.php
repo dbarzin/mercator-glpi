@@ -136,6 +136,25 @@ class MercatorClient implements MercatorClientInterface
     }
 
     // -------------------------------------------------------------------------
+    // Périmètres
+    // -------------------------------------------------------------------------
+
+    public function perimeterExists(int $id): ?bool
+    {
+        Log::debug("[Mercator] GET perimeters/{$id}");
+
+        $response = $this->request()->get($this->url("perimeters/{$id}"));
+
+        Log::debug("[Mercator] GET perimeters/{$id} → HTTP {$response->status()}");
+
+        return match (true) {
+            $response->successful() => true,
+            $response->status() === 404 => false,
+            default => null,
+        };
+    }
+
+    // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
 

@@ -34,7 +34,8 @@ class GlpiSyncCommand extends Command
     protected $signature = 'glpi:sync
                             {--dry-run : Simule la synchronisation sans écrire}
                             {--type=* : Types à synchroniser. Défaut : tous}
-                            {--entity= : ID de l\'entité GLPI (priorité sur GLPI_ENTITY_ID)}';
+                            {--entity= : ID de l\'entité GLPI (priorité sur GLPI_ENTITY_ID)}
+                            {--perimeter= : ID du périmètre Mercator imposé aux objets créés et mis à jour (priorité sur MERCATOR_PERIMETER_ID)}';
 
     protected $description = 'Synchronise les assets GLPI vers Mercator';
 
@@ -89,6 +90,24 @@ class GlpiSyncCommand extends Command
             $this->line("  <fg=yellow>» Entité GLPI filtrée : {$entityId}</>");
         }
 
+        // ── Périmètre Mercator ───────────────────────────────────────────────
+
+        $perimeterOption = $this->option('perimeter');
+
+        if ($perimeterOption !== null && ! ctype_digit((string) $perimeterOption)) {
+            $this->error("Option --perimeter invalide : « {$perimeterOption} » (identifiant numérique attendu)");
+
+            return self::FAILURE;
+        }
+
+        $perimeterId = $perimeterOption !== null
+            ? (int) $perimeterOption
+            : config('glpi.mercator.perimeter_id');
+
+        if ($perimeterId !== null) {
+            $this->line("  <fg=yellow>» Périmètre Mercator : {$perimeterId}</>");
+        }
+
         $this->line('');
 
         // ── Authentification ─────────────────────────────────────────────────
@@ -101,6 +120,21 @@ class GlpiSyncCommand extends Command
             $this->line('  Authentification Mercator…');
             $mercator->authenticate();
             $this->line('  <fg=green>✔ Mercator connecté</>');
+
+            if ($perimeterId !== null) {
+                $exists = $mercator->perimeterExists($perimeterId);
+
+                if ($exists === false) {
+                    $this->error("Le périmètre Mercator {$perimeterId} n'existe pas");
+                    $glpi->killSession();
+
+                    return self::FAILURE;
+                }
+
+                if ($exists === null) {
+                    Log::warning("[perimeter] Existence du périmètre Mercator {$perimeterId} non vérifiable (permission « configure » requise) — un périmètre invalide sera rejeté objet par objet (HTTP 422)");
+                }
+            }
         } catch (Throwable $e) {
             $this->error('Échec de l\'authentification : '.$e->getMessage());
 
@@ -237,7 +271,7 @@ class GlpiSyncCommand extends Command
             $this->line("  <fg=cyan>─── {$type} ───</>");
 
             try {
-                $stats = $syncService->sync($glpi, $mercator, $handler, $dryRun);
+                $stats = $syncService->sync($glpi, $mercator, $handler, $dryRun, $perimeterId);
 
                 if ($stats['endpoint_missing'] ?? false) {
                     $this->warn('  Endpoint non disponible dans Mercator — type ignoré');

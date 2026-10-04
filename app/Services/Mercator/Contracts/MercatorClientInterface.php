@@ -11,4 +11,10 @@ interface MercatorClientInterface
     public function create(string $endpoint, array $payload): array;
     public function update(string $endpoint, int $id, array $payload): array;
     public function delete(string $endpoint, int $id): void;
+
+    /**
+     * true : le périmètre existe ; false : inconnu (404) ; null : vérification
+     * impossible (ex. compte API sans permission "configure").
+     */
+    public function perimeterExists(int $id): ?bool;
 }

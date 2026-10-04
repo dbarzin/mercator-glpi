@@ -17,6 +17,7 @@
   - [Configuration côté GLPI](#configuration-côté-glpi)
   - [API GLPI v2 : différences et limites](#api-glpi-v2--différences-et-limites)
   - [Configuration côté Mercator](#configuration-côté-mercator)
+  - [Périmètre Mercator](#périmètre-mercator)
 - [Utilisation](#utilisation)
   - [Synchronisation complète](#synchronisation-complète)
   - [Ordre d'exécution et dépendances](#ordre-dexécution-et-dépendances)
@@ -207,6 +208,7 @@ Copiez `.env.sample` vers `.env` et renseignez les valeurs :
 | `MERCATOR_URL` | — | URL de base de l'instance Mercator (sans slash final)                                                                                                                     | `https://mercator.acme.fr`                             |
 | `MERCATOR_LOGIN` | — | Email du compte Mercator utilisé pour l'API                                                                                                                               | `sync@acme.fr`                                         |
 | `MERCATOR_PASSWORD` | — | Mot de passe du compte Mercator                                                                                                                                           | `motdepasse`                                           |
+| `MERCATOR_PERIMETER_ID` | _(vide)_ | ID du périmètre Mercator imposé aux objets créés **et** mis à jour (remplace le périmètre existant) ; vide = périmètre non géré par le connecteur. Surchargé par `--perimeter` (voir [Périmètre Mercator](#périmètre-mercator)) | `2`                                                    |
 | `SYNC_DRY_RUN` | `false` | Si `true`, simule sans écrire dans Mercator                                                                                                                               | `true`                                                 |
 | `GLPI_SYNC_VM_LINKS` | `false` | Si `true`, importe les liens serveur logique (VM) ↔ serveur(s) physique(s) hôte(s) (voir [Liens VM ↔ serveur physique](#liens-serveur-logique-vm--serveur-physique-glpi_sync_vm_links)) | `true`                                                 |
 | `GLPI_SYNC_ONLY_ACTIVE_DATABASES` | `false` | Si `true`, ne synchronise que les bases de données dont `is_active = 1` dans GLPI ; `false` = toutes les bases | `true`                                                 |
@@ -306,6 +308,30 @@ Correspondance des ressources : `Computer`, `NetworkEquipment`, `Phone`, `Periph
 
 Le compte Mercator utilisé doit disposer des droits d'écriture (création + modification) sur tous les endpoints synchronisés. Aucune configuration supplémentaire n'est requise côté Mercator.
 
+### Périmètre Mercator
+
+Mercator peut cloisonner sa cartographie en **périmètres** : chaque objet porte un `perimeter_id`, et les rôles des utilisateurs donnent accès à un ou plusieurs périmètres. Le connecteur peut ranger les objets issus de GLPI dans un périmètre donné, via l'option `--perimeter=<id>` ou la variable `MERCATOR_PERIMETER_ID` (l'option est prioritaire).
+
+| Configuration | Création | Mise à jour | Nettoyage des orphelins (suppression / `[OLD]`) |
+|---|---|---|---|
+| Aucun périmètre (défaut) | pas de `perimeter_id` envoyé : Mercator applique son défaut (périmètre actif du compte API, à défaut le premier de ses rôles, à défaut le périmètre 1 « Défaut ») | périmètre **inchangé** | tous les objets visibles par le compte API |
+| `--perimeter=N` | `perimeter_id = N` | `perimeter_id = N` : **remplace** le périmètre existant (l'objet est déplacé dans N) | uniquement les objets du périmètre N |
+
+Avec un périmètre défini :
+
+- la réconciliation par `ext_refs` (`{GLPI}<id>`) porte sur tous les périmètres visibles : un objet déjà synchronisé dans un autre périmètre est retrouvé et **déplacé** dans le périmètre N ;
+- Mercator n'imposant l'unicité des noms que **par périmètre**, en cas d'homonymes (même nom, ou même tag `ext_refs`) l'objet du périmètre N est privilégié ; de même pour la résolution des bâtiments et sites (`building_id`, `site_id`) ;
+- les objets des **autres** périmètres qui ne correspondent à aucun item GLPI ne sont ni supprimés ni marqués `[OLD]` : plusieurs synchronisations (ex. une par entité GLPI) peuvent alimenter chacune leur périmètre ;
+- les mises à jour de liens (`links`, `activity_links`, `appliance_links`, `database_links`, `vm_links`) et le renommage `[OLD]` ne modifient jamais le périmètre ;
+- au démarrage, le connecteur vérifie que le périmètre existe (`GET /api/perimeters/{id}`) et s'arrête sinon (`Le périmètre Mercator N n'existe pas`). Cette vérification requiert la permission `configure` ; sans elle, elle est ignorée (warning dans les logs).
+
+Prérequis côté Mercator : le compte `MERCATOR_LOGIN` doit avoir un **rôle sur le périmètre N** (avec les droits de création/modification sur les objets synchronisés). Sinon Mercator rejette chaque objet avec une erreur HTTP 422 sur `perimeter_id`. Sur un Mercator où la gestion des périmètres est désactivée, le `perimeter_id` est simplement enregistré sur les objets.
+
+```bash
+# Ranger les actifs de l'entité GLPI 3 dans le périmètre Mercator 2
+php application glpi:sync --entity=3 --perimeter=2
+```
+
 ---
 
 ## Utilisation
@@ -385,6 +411,7 @@ php application glpi:sync --type=database_links   # liens database ↔ serveur l
 | `--type=<type>` | tous les types | Type d'actif à synchroniser (répétable) |
 | `--dry-run` | `false` | Simule la synchronisation sans écrire dans Mercator |
 | `--entity=<id>` | valeur de `GLPI_ENTITY_ID` | Filtre sur une entité GLPI précise (récursif) |
+| `--perimeter=<id>` | valeur de `MERCATOR_PERIMETER_ID` | Périmètre Mercator imposé aux objets créés et mis à jour (voir [Périmètre Mercator](#périmètre-mercator)) |
 
 ### Exemples de commandes courantes
 
@@ -394,6 +421,9 @@ php application glpi:sync --dry-run
 
 # Synchroniser uniquement les postes de travail de l'entité 3
 php application glpi:sync --type=workstations --entity=3
+
+# Synchroniser l'entité GLPI 3 dans le périmètre Mercator 2
+php application glpi:sync --entity=3 --perimeter=2
 
 # Synchroniser plusieurs types sans toucher aux autres
 php application glpi:sync --type=workstations --type=applications
@@ -1230,6 +1260,9 @@ Les tests utilisent **Mockery** et `Http::fake()` — aucun appel réseau réel.
 | `SoftwareCategoryFilterTest` | Filtrage par catégorie Software (`GLPI_SOFTWARE_CATEGORIES`) |
 | `SiteSyncHandlerTest` | Filtre `filterItem()` du `SiteSyncHandler` (Location racine uniquement) |
 | `GlpiSyncCommandTest` (`tests/Feature/`) | Intégration commande CLI |
+| `PerimeterOptionCommandTest` (`tests/Feature/`) | Option `--perimeter` / `MERCATOR_PERIMETER_ID` : priorité, validation, arrêt si périmètre inexistant |
+| `GlpiSyncServicePerimeterTest` | Périmètre Mercator : `perimeter_id` à la création et à la mise à jour, homonymes, nettoyage limité au périmètre, building/site |
+| `MercatorClientPerimeterTest` | Vérification d'existence d'un périmètre (`perimeterExists()`) |
 
 > Il n'existe pas (encore) de test dédié pour `CertificateMapper`/`CertificateSyncHandler` ni `ClusterMapper`/`ClusterSyncHandler`.
 
