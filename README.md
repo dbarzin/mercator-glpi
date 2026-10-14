@@ -114,7 +114,7 @@ MercatorClient               — Client HTTP Mercator (API REST, Bearer token)
 |---|---|
 | PHP | 8.2 |
 | Composer | 2.x |
-| GLPI | 11.x (API v2) — ou 10.x avec `GLPI_API_VERSION=v1` |
+| GLPI | 12.x / 11.x (API v2) — ou 10.x avec `GLPI_API_VERSION=v1` |
 | Mercator | dernière version stable |
 | Extension PHP `curl` | — |
 | Extension PHP `json` | — |

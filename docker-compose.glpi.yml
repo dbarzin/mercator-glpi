@@ -1,32 +1,38 @@
 # =============================================================================
 # docker-compose.glpi.yml — Stack GLPI pour développement / test
 # Usage : ./glpi.sh start | stop | status | logs | url
+#
+# Image officielle : https://github.com/glpi-project/docker-images
+# Le code GLPI est embarqué dans l'image ; toutes les données (config,
+# glpicrypt.key, files, marketplace, logs) vivent dans le volume /var/glpi.
+# Le tag est épinglé sur une branche mineure : changer de version majeure
+# se fait explicitement ici (GLPI ne sait pas redescendre de version).
 # =============================================================================
 
 services:
 
   glpi:
-    image: diouxx/glpi:latest
+    image: glpi/glpi:12.0
     container_name: glpi-app
     restart: unless-stopped
     ports:
       - "8080:80"
     environment:
-      MARIADB_HOST: glpi-db
-      MARIADB_DATABASE: glpi
-      MARIADB_USER: glpi
-      MARIADB_PASSWORD: glpi
-      GLPI_LANG: fr_FR
+      # Les 5 variables GLPI_DB_* activent l'installation et la mise à jour
+      # automatiques de la base au démarrage du conteneur.
+      GLPI_DB_HOST: glpi-db
+      GLPI_DB_PORT: 3306
+      GLPI_DB_NAME: glpi
+      GLPI_DB_USER: glpi
+      GLPI_DB_PASSWORD: glpi
       TZ: Europe/Luxembourg
     volumes:
-      - glpi_files:/var/www/html/files
-      - glpi_plugins:/var/www/html/plugins
-      - glpi_config:/var/www/html/config
+      - glpi_data:/var/glpi
     depends_on:
       glpi-db:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost/index.php"]
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://localhost/"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -52,11 +58,7 @@ services:
       start_period: 30s
 
 volumes:
-  glpi_files:
-    driver: local
-  glpi_plugins:
-    driver: local
-  glpi_config:
+  glpi_data:
     driver: local
   glpi_db:
     driver: local

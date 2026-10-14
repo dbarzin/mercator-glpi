@@ -56,11 +56,9 @@ cmd_stop() {
     check_compose_file
     print_header
     echo -e "${YELLOW}» Arrêt du stack GLPI...${NC}"
-    # Utilise "stop" (et non "down") pour préserver les conteneurs : le code
-    # GLPI vit dans /var/www/html/glpi, hors des volumes persistants
-    # (files/plugins/config). Un "down" le détruit et force un re-téléchargement
-    # de la dernière version de GLPI au prochain démarrage, ce qui peut déclencher
-    # une mise à jour non désirée et invalider la clé API. Voir `update`.
+    # Utilise "stop" (et non "down") pour conserver les conteneurs tels quels ;
+    # les données (config, glpicrypt.key, files, base MariaDB) sont de toute
+    # façon dans des volumes et le code GLPI est embarqué dans l'image.
     compose stop
     echo -e "${GREEN}✔ Stack arrêté.${NC}"
 }
@@ -82,11 +80,11 @@ cmd_down() {
 cmd_update() {
     check_compose_file
     print_header
-    echo -e "${YELLOW}» Mise à jour de GLPI (code + éventuellement image Docker)...${NC}"
-    echo -e "${YELLOW}  Cela va détruire puis recréer les conteneurs : la dernière${NC}"
-    echo -e "${YELLOW}  version de GLPI sera re-téléchargée. Une mise à jour de base${NC}"
-    echo -e "${YELLOW}  de données peut être requise via l'interface web, et la clé${NC}"
-    echo -e "${YELLOW}  API pourrait devoir être régénérée.${NC}"
+    echo -e "${YELLOW}» Mise à jour de GLPI (dernière image du tag épinglé)...${NC}"
+    echo -e "${YELLOW}  Les conteneurs vont être recréés ; la base est mise à jour${NC}"
+    echo -e "${YELLOW}  automatiquement au démarrage. Le tag (ex. 12.0) ne change${NC}"
+    echo -e "${YELLOW}  que de version corrective : changer de version majeure se${NC}"
+    echo -e "${YELLOW}  fait dans docker-compose.glpi.yml.${NC}"
     compose pull
     compose down
     compose up -d --remove-orphans --force-recreate
@@ -178,10 +176,10 @@ cmd_help() {
     echo -e "  ${GREEN}stop${NC}            Arrêter le stack GLPI (conteneurs conservés)"
     echo -e "  ${GREEN}restart${NC}         Redémarrer le stack GLPI"
     echo -e "  ${GREEN}status${NC}          Voir l'état des conteneurs"
-    echo -e "  ${GREEN}logs${NC} [service]  Suivre les logs (optionnel : glpi | db)"
+    echo -e "  ${GREEN}logs${NC} [service]  Suivre les logs (optionnel : glpi | glpi-db)"
     echo -e "  ${GREEN}url${NC}             Afficher les URLs d'accès"
     echo -e "  ${GREEN}down${NC}            Supprimer les conteneurs (volumes conservés)"
-    echo -e "  ${GREEN}update${NC}          Forcer la mise à jour de GLPI (re-télécharge la dernière version)"
+    echo -e "  ${GREEN}update${NC}          Mettre à jour GLPI (dernière image du tag épinglé)"
     echo ""
     echo "Fichier compose : $COMPOSE_FILE"
 }
